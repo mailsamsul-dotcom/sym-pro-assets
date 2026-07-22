@@ -1,0 +1,698 @@
+const BOT_TOKEN = '8896830235:AAFJPJP_n2_WVmWb1ZpzAue08E_WkCWoGpw';
+const SHEET_ID = '1dmjPYEgJ2-lwr7j9QS9P5-yhEfzwq4w7IKSqsu5O4xI';
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+    .setTitle('Sym_Pro Sistem Management')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+function sendTelegramOTP(chatId, otp) {
+  try {
+    if (!chatId || chatId === "" || chatId === "undefined") {
+      return { status: false, errorDetail: "Chat ID kosong." };
+    }
+    
+    let message = `🔑 *Kode OTP Login Sym_Pro*\n\nKode verifikasi Anda adalah: *${otp}*\nBerlaku selama 5 menit. Jangan berikan kode ini kepada siapa pun.`;
+    let url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    
+    let payload = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      }),
+      muteHttpExceptions: true
+    };
+    
+    let response = UrlFetchApp.fetch(url, payload);
+    let result = JSON.parse(response.getContentText());
+    
+    if (result.ok) {
+      return { status: true };
+    } else {
+      return { status: false, errorDetail: result.description || "Gagal dari Telegram API" };
+    }
+  } catch (e) {
+    return { status: false, errorDetail: e.message };
+  }
+}
+
+function registerUser(data) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Users");
+    const dataRange = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < dataRange.length; i++) {
+      if (dataRange[i][2] === data.email || dataRange[i][3] === data.username) {
+        return { success: false, message: "Email atau Username sudah terdaftar!" };
+      }
+    }
+    
+    sheet.appendRow([
+      new Date(), 
+      data.namaLengkap, 
+      data.email, 
+      data.username, 
+      data.password, 
+      data.chatId,
+      'user',
+      'pending'
+    ]);
+    
+    return { success: true, message: "Registrasi berhasil! Mohon tunggu approval dari Superadmin." };
+  } catch(e) {
+    return { success: false, message: "Error: " + e.message };
+  }
+}
+
+function processLogin(username, password) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Users");
+    if (!sheet) {
+      return { success: false, message: "Sheet 'Users' tidak ditemukan pada Spreadsheet!" };
+    }
+    
+    const dataRange = sheet.getDataRange().getValues();
+    const inputUser = String(username).trim();
+    const inputPass = String(password).trim();
+    
+    for (let i = 1; i < dataRange.length; i++) {
+      const dbEmail = String(dataRange[i][2] || "").trim();
+      const dbUsername = String(dataRange[i][3] || "").trim();
+      const dbPass = String(dataRange[i][4] || "").trim();
+      
+      const dbRole = dataRange[i][6] ? String(dataRange[i][6]).trim().toLowerCase() : 'user';
+      const dbStatus = dataRange[i][7] ? String(dataRange[i][7]).trim().toLowerCase() : '';
+      
+      if ((dbEmail === inputUser || dbUsername === inputUser) && dbPass === inputPass) {
+        
+        if (dbStatus !== 'active') {
+          return { success: false, message: "Akun Anda belum di-approve oleh Superadmin." };
+        }
+        
+        const chatId = String(dataRange[i][5] || "").trim(); 
+        if (!chatId || chatId === "" || chatId === "undefined") {
+          return { success: false, message: "Chat ID Telegram tidak valid." };
+        }
+        
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        const cache = CacheService.getScriptCache();
+        const sessionData = { otp: otp, role: dbRole, name: String(dataRange[i][1] || inputUser) };
+        cache.put(inputUser, JSON.stringify(sessionData), 300);
+        
+        const sendStatus = sendTelegramOTP(chatId, otp);
+        
+        if(sendStatus.status === true) {
+          return { success: true, requireOtp: true, message: "OTP telah dikirim ke Telegram Anda." };
+        } else {
+          return { success: false, message: "Gagal Kirim OTP! " + (sendStatus.errorDetail || "Pastikan sudah tekan Start di Bot Telegram.") };
+        }
+      }
+    }
+    return { success: false, message: "Username/Email atau Password salah!" };
+  } catch(e) {
+    return { success: false, message: "Error Server: " + e.message };
+  }
+}
+
+function verifyOTP(username, inputOtp) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const cachedString = cache.get(username);
+    
+    if (cachedString) {
+      const cachedData = JSON.parse(cachedString);
+      
+      if (cachedData.otp === inputOtp) {
+        cache.remove(username);
+        return { success: true, role: cachedData.role, name: cachedData.name, message: "Login Berhasil!" };
+      }
+    }
+    
+    return { success: false, message: "OTP salah atau sudah kedaluwarsa!" };
+  } catch(e) {
+    return { success: false, message: "Error: " + e.message };
+  }
+}
+
+function getAllUsers() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Users");
+    if (!sheet) return { success: false, users: [], message: "Sheet Users tidak ditemukan." };
+    
+    const data = sheet.getDataRange().getValues();
+    let users = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      if(data[i][3]) { 
+        users.push({
+          nama: data[i][1],
+          email: data[i][2],
+          username: data[i][3],
+          role: data[i][6] || 'user',
+          status: data[i][7] || 'pending'
+        });
+      }
+    }
+    return { success: true, users: users };
+  } catch(e) {
+    return { success: false, users: [], message: e.message };
+  }
+}
+
+function approveUserByAdmin(username) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Users");
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][3]).trim() === String(username).trim()) {
+        sheet.getRange(i + 1, 8).setValue('active'); 
+        return { success: true, message: `User ${username} berhasil di-approve!` };
+      }
+    }
+    return { success: false, message: "User tidak ditemukan." };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function getMasterTechnicians() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Master Teknisi");
+    if (!sheet) return { success: false, technicians: [] };
+    const data = sheet.getDataRange().getValues();
+    let techs = [];
+    for (let i = 1; i < data.length; i++) {
+      let nama = String(data[i][0]).trim();
+      if (nama) techs.push(nama);
+    }
+    return { success: true, technicians: [...new Set(techs)] };
+  } catch (err) {
+    return { success: false, technicians: [] };
+  }
+}
+
+function getMasterErrorCodes() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Master Error Code");
+    if (!sheet) return { success: false, errorCodes: [] };
+    const data = sheet.getDataRange().getValues();
+    let list = [];
+    for (let i = 1; i < data.length; i++) {
+      let err = String(data[i][0]).trim();
+      let sub = String(data[i][1]).trim();
+      if (err || sub) {
+        list.push({ errorCode: err, subErrorCode: sub });
+      }
+    }
+    return { success: true, errorCodes: list };
+  } catch (err) {
+    return { success: false, errorCodes: [] };
+  }
+}
+
+/* =========================================================
+   FUNGSI MAPPING TIM
+========================================================= */
+function getMappingTim() {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName("Mapping Tim");
+    if (!sheet) {
+      sheet = ss.insertSheet("Mapping Tim");
+      sheet.appendRow(["Nama Tim", "Leader", "Member", "Last Updated"]);
+      return { success: true, data: [] };
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    let mapping = [];
+    for (let i = 1; i < data.length; i++) {
+      if (data[i][0]) {
+        mapping.push({
+          tim: String(data[i][0]).trim(),
+          leader: String(data[i][1]).trim(),
+          member: String(data[i][2]).trim()
+        });
+      }
+    }
+    return { success: true, data: mapping };
+  } catch(e) {
+    return { success: false, message: e.message, data: [] };
+  }
+}
+
+function saveMappingTim(timName, leader, member) {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName("Mapping Tim");
+    if (!sheet) sheet = ss.insertSheet("Mapping Tim");
+
+    const data = sheet.getDataRange().getValues();
+    let isUpdate = false;
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === timName.trim()) {
+        sheet.getRange(i + 1, 2).setValue(leader);
+        sheet.getRange(i + 1, 3).setValue(member);
+        sheet.getRange(i + 1, 4).setValue(new Date());
+        isUpdate = true;
+        break;
+      }
+    }
+
+    if (!isUpdate) {
+      sheet.appendRow([timName, leader, member, new Date()]);
+    }
+    
+    return { success: true, message: "Mapping Tim berhasil disimpan!" };
+  } catch(e) {
+    return { success: false, message: "Error: " + e.message };
+  }
+}
+
+function deleteMappingTim(timName) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName("Mapping Tim");
+    if (!sheet) return { success: false, message: "Sheet tidak ditemukan" };
+    
+    const data = sheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === timName.trim()) {
+        sheet.deleteRow(i + 1);
+        return { success: true, message: `Tim ${timName} berhasil dihapus!` };
+      }
+    }
+    return { success: false, message: "Tim tidak ditemukan" };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+/* ========================================================= */
+
+function getSheetDataByName(sheetName) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(sheetName);
+    if (!sheet) return { success: false, message: "Sheet '" + sheetName + "' tidak ditemukan." };
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return { success: false, message: "Data pada sheet " + sheetName + " kosong." };
+    
+    const headers = data[0];
+    const rows = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      let row = data[i];
+      let hasContent = row.some(cell => cell !== undefined && cell !== null && String(cell).trim() !== "");
+      
+      if (hasContent) {
+        let cleanRow = row.map(cell => {
+          if (cell instanceof Date) {
+            return cell.toLocaleString('id-ID');
+          }
+          return cell !== undefined && cell !== null ? String(cell) : "";
+        });
+        rows.push(cleanRow);
+      }
+    }
+
+    if (rows.length === 0) return { success: false, message: "Data pada sheet " + sheetName + " kosong atau belum ada order valid." };
+
+    return { success: true, headers: headers, rows: rows };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function getDailyOrderData() { return getSheetDataByName("List Daily Order"); }
+function getOrderKendalaData() { return getSheetDataByName("Order Kendala"); }
+function getOrderCompletedData() { return getSheetDataByName("Order Completed"); }
+
+function updateDailyOrderData(payload) {
+  try {
+    const targetSheetName = payload.sheetName || "List Daily Order";
+    const sheet = SpreadsheetApp.openById(SHEET_ID).getSheetByName(targetSheetName);
+    if (!sheet) return { success: false, message: "Sheet '" + targetSheetName + "' tidak ditemukan." };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim().toLowerCase());
+    
+    let targetRowIdx = -1;
+    let woCol = headers.findIndex(h => h.includes('workorder'));
+    let trCol = headers.findIndex(h => h.includes('track_id') || h.includes('track id') || h.includes('sc order no') || h.includes('csrm'));
+
+    for (let i = 1; i < data.length; i++) {
+      let wVal = woCol !== -1 ? String(data[i][woCol]).trim() : "";
+      let tVal = trCol !== -1 ? String(data[i][trCol]).trim() : "";
+      if ((payload.oldWorkorder && wVal === payload.oldWorkorder) || (payload.oldTrackId && tVal === payload.oldTrackId) || (payload.workorder && wVal === payload.workorder)) {
+        targetRowIdx = i + 1;
+        break;
+      }
+    }
+
+    if (targetRowIdx === -1) return { success: false, message: "Order tidak ditemukan di Sheet " + targetSheetName };
+
+    const updateMap = {
+      "crm order type": payload.crmOrderType,
+      "workorder": payload.workorder,
+      "track_id": payload.trackId,
+      "sc order no/track id/csrm no": payload.trackId,
+      "service no.": payload.serviceNo,
+      "package_info": payload.packageInfo,
+      "leader": payload.leader,
+      "member": payload.member,
+      "errorcode": payload.errorCode,
+      "suberrorcode": payload.subErrorCode,
+      "engineermemo (sa)": payload.engineerMemo
+    };
+
+    if (payload.action === 'assign' && payload.assignTime) {
+      updateMap["assign date"] = payload.assignTime;
+      updateMap["waktu assign"] = payload.assignTime;
+      updateMap["assigned date"] = payload.assignTime;
+    }
+
+    for (let colName in updateMap) {
+      if (updateMap[colName] !== undefined && updateMap[colName] !== null) {
+        let idx = headers.findIndex(h => h === colName || h === colName.toLowerCase());
+        if (idx !== -1) {
+          sheet.getRange(targetRowIdx, idx + 1).setValue(updateMap[colName]);
+        }
+      }
+    }
+
+    if (payload.action === 'assign') {
+      sendTelegramNotification(payload.trackId || payload.workorder, payload.leader, payload.member, payload.timName);
+    }
+
+    return { success: true, message: "Data berhasil diperbarui di Spreadsheet (" + targetSheetName + ")!" };
+  } catch(e) {
+    return { success: false, message: "Gagal update: " + e.message };
+  }
+}
+
+function sendTelegramNotification(trackId, leader, member, timName) {
+  try {
+    let text = `[ORDER ASSIGNED]\nID: ${trackId || '-'}\nTim: ${timName || '-'}\nPetugas: ${leader || '-'} & ${member || '-'}\nSegera lakukan instalasi/perbaikan.`;
+    let url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    UrlFetchApp.fetch(url, {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({ chat_id: 'YOUR_GROUP_CHAT_ID', text: text })
+    });
+  } catch(e){}
+}
+
+/* =========================================================
+   FUNGSI SINKRONISASI (UPDATE DATA -> LIST DAILY ORDER)
+   Sesuai aturan ketat: Cek 3 Sheet, Header Mapping, getLastRow, Batch setValues
+========================================================= */
+function syncNewOrdersFromUpdateData() {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    
+    var sourceSheet = ss.getSheetByName("Update Data");
+    var destSheet = ss.getSheetByName("List Daily Order");
+    var sheetKendala = ss.getSheetByName("Order Kendala");
+    var sheetCompleted = ss.getSheetByName("Order Completed");
+    
+    if (!sourceSheet || !destSheet) {
+      return { success: false, message: "Sheet 'Update Data' atau 'List Daily Order' tidak ditemukan!" };
+    }
+    
+    var KEY_NAME = "SC Order No/Track ID/CSRM No";
+
+    // Ambil header dari sheet tujuan (List Daily Order)
+    var destHeaders = destSheet.getRange(1, 1, 1, destSheet.getLastColumn() || 10).getValues()[0];
+    var destKeyIndex = -1;
+    for (var h = 0; h < destHeaders.length; h++) {
+      if (String(destHeaders[h]).trim().toLowerCase() === KEY_NAME.toLowerCase()) {
+        destKeyIndex = h + 1;
+        break;
+      }
+    }
+    if (destKeyIndex === -1) destKeyIndex = 4; // Fallback ke kolom D jika tidak ketemu
+    
+    // Cari baris terakhir berdasarkan Kolom Key yang sebenarnya terisi data
+    var destLastRow = 0;
+    var maxRows = destSheet.getLastRow() < 2 ? 2 : destSheet.getLastRow();
+    var checkRange = destSheet.getRange(1, destKeyIndex, maxRows, 1).getValues(); 
+    for (var i = checkRange.length - 1; i >= 0; i--) {
+      var valKeyCheck = String(checkRange[i][0]).trim();
+      if (valKeyCheck !== "" && valKeyCheck.toLowerCase() !== KEY_NAME.toLowerCase() && !valKeyCheck.toUpperCase().includes("TRACK_ID")) {
+        destLastRow = i + 1;
+        break;
+      }
+    }
+    if (destLastRow === 0) destLastRow = 1;
+    
+    // 1. Kumpulkan semua key yang SUDAH ADA di 3 Sheet sekaligus
+    var existingKeys = {};
+    
+    // A. Dari 'List Daily Order'
+    if (destLastRow >= 2) {
+      var destKeys = destSheet.getRange(2, destKeyIndex, destLastRow - 1, 1).getValues();
+      for (var i = 0; i < destKeys.length; i++) {
+        var kVal = String(destKeys[i][0]).trim();
+        if (kVal && kVal.toLowerCase() !== KEY_NAME.toLowerCase() && !kVal.toUpperCase().includes("TRACK_ID")) {
+          existingKeys[kVal] = true;
+        }
+      }
+    }
+    
+    // B. Dari 'Order Kendala'
+    if (sheetKendala && sheetKendala.getLastRow() >= 2) {
+      var kHeaders = sheetKendala.getRange(1, 1, 1, sheetKendala.getLastColumn()).getValues()[0];
+      var kKeyIdx = -1;
+      for (var kh = 0; kh < kHeaders.length; kh++) {
+        if (String(kHeaders[kh]).trim().toLowerCase() === KEY_NAME.toLowerCase()) {
+          kKeyIdx = kh + 1;
+          break;
+        }
+      }
+      if (kKeyIdx === -1) kKeyIdx = 4;
+      var kendalaKeys = sheetKendala.getRange(2, kKeyIdx, sheetKendala.getLastRow() - 1, 1).getValues();
+      for (var i = 0; i < kendalaKeys.length; i++) {
+        var kVal = String(kendalaKeys[i][0]).trim();
+        if (kVal && kVal.toLowerCase() !== KEY_NAME.toLowerCase() && !kVal.toUpperCase().includes("TRACK_ID")) {
+          existingKeys[kVal] = true;
+        }
+      }
+    }
+    
+    // C. Dari 'Order Completed'
+    if (sheetCompleted && sheetCompleted.getLastRow() >= 2) {
+      var cHeaders = sheetCompleted.getRange(1, 1, 1, sheetCompleted.getLastColumn()).getValues()[0];
+      var cKeyIdx = -1;
+      for (var ch = 0; ch < cHeaders.length; ch++) {
+        if (String(cHeaders[ch]).trim().toLowerCase() === KEY_NAME.toLowerCase()) {
+          cKeyIdx = ch + 1;
+          break;
+        }
+      }
+      if (cKeyIdx === -1) cKeyIdx = 4;
+      var completedKeys = sheetCompleted.getRange(2, cKeyIdx, sheetCompleted.getLastRow() - 1, 1).getValues();
+      for (var i = 0; i < completedKeys.length; i++) {
+        var cVal = String(completedKeys[i][0]).trim();
+        if (cVal && cVal.toLowerCase() !== KEY_NAME.toLowerCase() && !cVal.toUpperCase().includes("TRACK_ID")) {
+          existingKeys[cVal] = true;
+        }
+      }
+    }
+    
+    // 2. Ambil seluruh data dari sheet sumber 'Update Data'
+    var sourceLastRow = sourceSheet.getLastRow();
+    if (sourceLastRow < 2) {
+      return { success: true, added: 0, message: "Sheet 'Update Data' kosong." };
+    }
+    
+    var sourceHeaders = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
+    var sourceData = sourceSheet.getRange(2, 1, sourceLastRow - 1, sourceSheet.getLastColumn()).getValues();
+    
+    var sourceKeyIndex = -1;
+    for (var sh = 0; sh < sourceHeaders.length; sh++) {
+      if (String(sourceHeaders[sh]).trim().toLowerCase() === KEY_NAME.toLowerCase()) {
+        sourceKeyIndex = sh;
+        break;
+      }
+    }
+    if (sourceKeyIndex === -1) sourceKeyIndex = destKeyIndex - 1;
+    
+    // Petakan nama header otomatis (Case-insensitive)
+    var headerMap = {};
+    destHeaders.forEach(function(header) {
+      var hClean = String(header).trim().toLowerCase();
+      if (hClean !== "") {
+        var foundIdx = -1;
+        for (var s = 0; s < sourceHeaders.length; s++) {
+          if (String(sourceHeaders[s]).trim().toLowerCase() === hClean) {
+            foundIdx = s;
+            break;
+          }
+        }
+        headerMap[header] = foundIdx;
+      }
+    });
+    
+    var rowsToAppend = [];
+    
+    // 3. Filter baris baru yang belum ada di 3 sheet
+    for (var j = 0; j < sourceData.length; j++) {
+      var sourceRow = sourceData[j];
+      var keyValue = sourceRow[sourceKeyIndex];
+      
+      if (!keyValue) continue;
+      var keyString = keyValue.toString().trim();
+      
+      if (keyString === "" || keyString.toLowerCase() === KEY_NAME.toLowerCase() || keyString.toUpperCase().includes("TRACK_ID")) {
+        continue;
+      }
+      
+      if (!existingKeys[keyString]) {
+        var newRow = [];
+        destHeaders.forEach(function(header) {
+          if (String(header).trim() !== "") {
+            var srcIdx = headerMap[header];
+            if (srcIdx !== -1 && srcIdx !== undefined && srcIdx < sourceRow.length) {
+              newRow.push(sourceRow[srcIdx]);
+            } else {
+              newRow.push("");
+            }
+          } else {
+            newRow.push("");
+          }
+        });
+        rowsToAppend.push(newRow);
+        existingKeys[keyString] = true; // Tandai agar unik dalam batch ini
+      }
+    }
+    
+    // 4. Masukkan baris baru secara batch di bawah data terakhir
+    if (rowsToAppend.length > 0) {
+      destSheet.getRange(destLastRow + 1, 1, rowsToAppend.length, destHeaders.length).setValues(rowsToAppend);
+      return { success: true, added: rowsToAppend.length, message: `${rowsToAppend.length} order baru berhasil ditambahkan ke List Daily Order!` };
+    } else {
+      return { success: true, added: 0, message: "Semua order sudah sinkron." };
+    }
+  } catch(e) {
+    return { success: false, message: "Gagal sinkronisasi: " + e.message };
+  }
+}
+
+function getRecentImports() {
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName("Import History");
+    if (!sheet) {
+      sheet = ss.insertSheet("Import History");
+      sheet.appendRow(["Timestamp", "File Name", "Type", "Status", "Uploader"]);
+      return [];
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    
+    let history = [];
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (data[i][1]) {
+        history.push({
+          timestamp: data[i][0] instanceof Date ? data[i][0].toLocaleString('id-ID') : String(data[i][0]),
+          file: String(data[i][1]),
+          type: String(data[i][2]),
+          status: String(data[i][3]),
+          by: String(data[i][4])
+        });
+      }
+      if (history.length >= 10) break;
+    }
+    return history;
+  } catch(e) {
+    return [];
+  }
+}
+
+function importExcelData(rowsArray, dataType, uploader, fileName) { 
+  try {
+    const ss = SpreadsheetApp.openById(SHEET_ID);
+    let sheet = ss.getSheetByName("Update Data");
+    if (!sheet) {
+      sheet = ss.insertSheet("Update Data");
+    }
+    
+    if (rowsArray.length <= 1) {
+      return { success: false, message: "File Excel kosong atau tidak memiliki data baris." };
+    }
+
+    const newHeaders = rowsArray[0].map(h => String(h).trim().toLowerCase());
+    
+    let trackIdIdxNew = newHeaders.findIndex(h => 
+      h.includes('sc order no') || h.includes('track_id') || h.includes('track id') || h.includes('csrm')
+    );
+    
+    const existingData = sheet.getDataRange().getValues();
+    let existingHeaders = [];
+    let existingRows = [];
+    
+    if (existingData.length > 0) {
+      existingHeaders = existingData[0].map(h => String(h).trim().toLowerCase());
+      existingRows = existingData.slice(1);
+    } else {
+      sheet.getRange(1, 1, 1, rowsArray[0].length).setValues([rowsArray[0]]);
+      existingHeaders = newHeaders;
+    }
+
+    let trackIdIdxOld = existingHeaders.findIndex(h => 
+      h.includes('sc order no') || h.includes('track_id') || h.includes('track id') || h.includes('csrm')
+    );
+
+    let rowMap = new Map();
+    if (trackIdIdxOld !== -1) {
+      existingRows.forEach(row => {
+        let tVal = String(row[trackIdIdxOld] || "").trim();
+        if (tVal) rowMap.set(tVal, row);
+      });
+    }
+
+    let newRows = rowsArray.slice(1);
+    let addedCount = 0;
+    let replacedCount = 0;
+
+    newRows.forEach(newRow => {
+      let tNew = trackIdIdxNew !== -1 ? String(newRow[trackIdIdxNew] || "").trim() : "";
+      if (tNew && rowMap.has(tNew)) {
+        rowMap.set(tNew, newRow);
+        replacedCount++;
+      } else if (tNew) {
+        rowMap.set(tNew, newRow);
+        addedCount++;
+      } else {
+        existingRows.push(newRow);
+        addedCount++;
+      }
+    });
+
+    let finalRows = Array.from(rowMap.values());
+    
+    sheet.clearContents();
+    let finalDataToSet = [rowsArray[0], ...finalRows];
+    sheet.getRange(1, 1, finalDataToSet.length, finalDataToSet[0].length).setValues(finalDataToSet);
+
+    let historySheet = ss.getSheetByName("Import History");
+    if (!historySheet) {
+      historySheet = ss.insertSheet("Import History");
+      historySheet.appendRow(["Timestamp", "File Name", "Type", "Status", "Uploader"]);
+    }
+    let nowStr = new Date().toLocaleString('id-ID');
+    historySheet.appendRow([nowStr, fileName, dataType, "Success", uploader]);
+
+    return { 
+      success: true, 
+      message: `Data berhasil di-import ke sheet 'Update Data'! (${addedCount} baru, ${replacedCount} ter-update karena duplikat).` 
+    };
+  } catch(e) {
+    return { success: false, message: "Gagal import: " + e.message };
+  }
+}
