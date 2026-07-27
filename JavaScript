@@ -1,0 +1,792 @@
+<script>
+    let tempUser = "";
+    let globalDailyHeaders = []; let globalDailyRows = [];
+    let currentEditingRowIndex = -1; let isOrderEditMode = false;
+    
+    let techniciansCache = []; let errorCodesCache = []; let mappingTimCache = [];
+    let currentActiveMode = 'daily-order';
+
+    let modeDataCache = { 'list-daily-order': null, 'order-kendala': null, 'order-completed': null };
+
+    let donutChartInstance = null; let mapInstance = null;
+    
+    // Map Geocoding Variables
+    let geocodeCache = JSON.parse(localStorage.getItem('sympro_geocode_cache') || '{}');
+    let geocodeQueue = [];
+    let isGeocoding = false;
+
+    // Global State for Dashboard Modal Filtering
+    window.dashFilteredData = { total: {all:[], create:[], migrate:[], modify:[]}, kp: {all:[], create:[], migrate:[], modify:[]}, kt: {all:[], create:[], migrate:[], modify:[]}, op: {all:[], create:[], migrate:[], modify:[]}, comp: {all:[], create:[], migrate:[], modify:[]} };
+
+    function getCacheKeyForMode(mode) {
+        if (mode === 'daily-order' || mode === 'order-hi' || mode === 'daily-report') return 'list-daily-order';
+        if (mode === 'order-kendala') return 'order-kendala';
+        if (mode === 'order-completed') return 'order-completed'; return mode;
+    }
+
+    let currentSortCol = null; let currentSortDir = 'asc';
+
+    function applyRoleAccess(role) {
+        const roleLower = String(role).toLowerCase(); const manageUserMenu = document.getElementById('menu-manage-user');
+        if (manageUserMenu) {
+            if (roleLower === 'superadmin') { manageUserMenu.classList.remove('hidden'); manageUserMenu.classList.add('flex'); } 
+            else { manageUserMenu.classList.add('hidden'); manageUserMenu.classList.remove('flex'); }
+        }
+    }
+
+    window.onload = function() {
+        const savedUser = localStorage.getItem("sym_pro_user"); const savedRole = localStorage.getItem("sym_pro_role");
+
+        const today = new Date(); const dateString = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+        document.getElementById('dash-date-range').innerText = dateString + " - " + dateString;
+
+        if (savedUser) {
+            document.getElementById('auth-bg').style.display = 'none'; document.getElementById('auth-card-container').style.display = 'none';
+            document.getElementById('dashboard-wrapper').classList.remove('hidden');
+            document.getElementById('user-role-badge').innerText = "Role: " + (savedRole || "USER").toUpperCase();
+            applyRoleAccess(savedRole || "user"); switchMenu('daily-report'); loadRecentImports();
+        }
+        fetchMasterData(); loadMappingTimData(); fetchGlobalUnassignedBadge();
+    };
+
+    /* ======= FUNGSI DASHBOARD DI JS ======= */
+    function loadDashboardData() {
+        const loadingEl = document.getElementById('dash-loading'); const contentEl = document.getElementById('dash-content');
+        loadingEl.classList.remove('hidden'); contentEl.classList.add('hidden');
+
+        if (modeDataCache['list-daily-order']) {
+            globalDailyHeaders = modeDataCache['list-daily-order'].headers;
+            globalDailyRows = modeDataCache['list-daily-order'].rows;
+            processDashboardData(globalDailyHeaders, globalDailyRows);
+        } else {
+            if (typeof google === 'undefined') return;
+            google.script.run.withSuccessHandler(function(res) {
+                if(res && res.success) {
+                    modeDataCache['list-daily-order'] = { headers: res.headers, rows: res.rows };
+                    globalDailyHeaders = res.headers;
+                    globalDailyRows = res.rows;
+                    processDashboardData(res.headers, res.rows);
+                } else { showMessage("Gagal memuat data dashboard", "error"); loadingEl.classList.add('hidden'); }
+            }).getDailyOrderData();
+        }
+    }
+
+    function processDashboardData(headersRaw, rows) {
+        const headers = headersRaw.map(h => String(h).trim().toLowerCase());
+        let leaderIdx = headers.findIndex(h => h === 'leader'); let memberIdx = headers.findIndex(h => h === 'member');
+        let crmIdx = headers.findIndex(h => h === 'crm order type'); let errIdx = headers.findIndex(h => h === 'errorcode');
+        let subErrIdx = headers.findIndex(h => h === 'suberrorcode'); let memoIdx = headers.findIndex(h => h.includes('engineermemo'));
+        let jenisIdx = headers.findIndex(h => h === 'jenis_error' || h === 'status');
+        let addrIdx = headers.findIndex(h => h === 'address');
+        
+        let woIdx = headers.findIndex(h => h.includes('workorder'));
+        let tselIdx = headers.findIndex(h => h === 'order id tsel' || h.includes('sc order no') || h.includes('csrm'));
+        let custIdx = headers.findIndex(h => h === 'customer name');
+
+        window.dashFilteredData = { total: {all:[], create:[], migrate:[], modify:[]}, kp: {all:[], create:[], migrate:[], modify:[]}, kt: {all:[], create:[], migrate:[], modify:[]}, op: {all:[], create:[], migrate:[], modify:[]}, comp: {all:[], create:[], migrate:[], modify:[]} };
+
+        let stats = { total: {all:0, create:0, migrate:0, modify:0}, kp: {all:0, create:0, migrate:0, modify:0}, kt: {all:0, create:0, migrate:0, modify:0}, op: {all:0, create:0, migrate:0, modify:0}, comp: {all:0, create:0, migrate:0, modify:0}, timSummary: {} };
+        let mapPoints = [];
+
+        let timMap = {};
+        mappingTimCache.forEach(t => timMap[String(t.leader).trim()] = `${String(t.tim).trim()} (${String(t.leader).trim()} - ${String(t.member).trim()})`);
+
+        rows.forEach((row, idx) => {
+            let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : "";
+            let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : "";
+            
+            if (!leader || leader === "-" || !member || member === "-") return;
+
+            let crmRaw = crmIdx !== -1 ? String(row[crmIdx] || "").trim().toLowerCase() : "";
+            let type = "other";
+            if (crmRaw.includes("create")) type = "create";
+            else if (crmRaw.includes("migrate")) type = "migrate";
+            else if (crmRaw.includes("modify")) type = "modify";
+
+            let err = errIdx !== -1 ? String(row[errIdx] || "") : ""; let sub = subErrIdx !== -1 ? String(row[subErrIdx] || "") : "";
+            let memo = memoIdx !== -1 ? String(row[memoIdx] || "") : ""; let jenis = jenisIdx !== -1 ? String(row[jenisIdx] || "") : "";
+            let comboText = `${err} ${sub} ${memo} ${jenis}`.toUpperCase();
+
+            let category = "op"; 
+            if (comboText.includes("COMPLETED") || comboText.includes("PS")) category = "comp";
+            else if (comboText.includes("KENDALA PELANGGAN")) category = "kp";
+            else if (comboText.includes("KENDALA TEKNIK")) category = "kt";
+
+            let woVal = woIdx !== -1 ? String(row[woIdx] || "").trim() : "-";
+            let tselVal = tselIdx !== -1 ? String(row[tselIdx] || "").trim() : "-";
+            
+            let shortTsel = tselVal;
+            let matchTsel = tselVal.match(/-(.*?)(_|$)/); 
+            if (matchTsel && matchTsel[1]) {
+                shortTsel = matchTsel[1];
+            }
+            let combinedWoTsel = `${woVal} / ${shortTsel}`;
+
+            let timNameFormatted = timMap[leader] || `${leader} (${member})`;
+
+            let modalObj = {
+                originalIndex: idx, 
+                wo: combinedWoTsel,
+                crm: crmRaw.toUpperCase(),
+                cust: custIdx !== -1 ? row[custIdx] : "-",
+                statusText: comboText, 
+                assign: `${leader} & ${member}`,
+                teamKey: timNameFormatted
+            };
+            
+            window.dashFilteredData.total.all.push(modalObj);
+            if(window.dashFilteredData.total[type]) window.dashFilteredData.total[type].push(modalObj);
+            
+            window.dashFilteredData[category].all.push(modalObj);
+            if(window.dashFilteredData[category][type]) window.dashFilteredData[category][type].push(modalObj);
+
+            stats.total.all++;
+            if(stats.total[type] !== undefined) stats.total[type]++;
+
+            stats[category].all++;
+            if(stats[category][type] !== undefined) stats[category][type]++;
+
+            if (!stats.timSummary[timNameFormatted]) stats.timSummary[timNameFormatted] = { total: 0, kp: 0, kt: 0, op: 0, comp: 0 };
+            stats.timSummary[timNameFormatted].total++;
+            stats.timSummary[timNameFormatted][category]++;
+
+            let addressStr = addrIdx !== -1 ? String(row[addrIdx] || "") : "";
+            if (addressStr) {
+                let fbCoords = getFallbackCoords(addressStr);
+                mapPoints.push({ lat: null, lng: null, fallbackLat: fbCoords[0], fallbackLng: fbCoords[1], wo: woVal, address: addressStr, cat: category });
+            }
+        });
+
+        let timArray = [];
+        for (let t in stats.timSummary) timArray.push({ tim: t, ...stats.timSummary[t] });
+        timArray.sort((a, b) => b.total - a.total);
+        
+        document.getElementById('dash-loading').classList.add('hidden');
+        document.getElementById('dash-content').classList.remove('hidden');
+
+        renderDashboardCards(stats);
+        renderDashboardTable(timArray);
+        renderDonutChart(stats.total.all, stats.comp.all);
+        renderMap(mapPoints);
+    }
+
+    function getFallbackCoords(addressStr) {
+        let hash = 0;
+        for (let i = 0; i < addressStr.length; i++) hash = addressStr.charCodeAt(i) + ((hash << 5) - hash);
+        let latOffset = (((Math.abs(hash) % 1000) / 10000) * 0.1) - 0.05;
+        let lngOffset = ((((Math.abs(hash) >> 3) % 1000) / 10000) * 0.1) - 0.05;
+        let jitterLat = (Math.random() - 0.5) * 0.0015;
+        let jitterLng = (Math.random() - 0.5) * 0.0015;
+        return [-7.28 + latOffset + jitterLat, 112.76 + lngOffset + jitterLng];
+    }
+
+    function renderDashboardCards(data) {
+        ['c1','c2','c3','c4','c5'].forEach((prefix, i) => {
+            let cat = ['total', 'kp', 'kt', 'op', 'comp'][i];
+            document.getElementById(`${prefix}-all`).innerText = data[cat].all.toLocaleString();
+            document.getElementById(`${prefix}-cr`).innerText = data[cat].create.toLocaleString();
+            document.getElementById(`${prefix}-mi`).innerText = data[cat].migrate.toLocaleString();
+            document.getElementById(`${prefix}-mo`).innerText = data[cat].modify.toLocaleString();
+        });
+    }
+
+    function renderDashboardTable(timArray) {
+        let tBody = document.getElementById('dash-tim-body'); let tHtml = "";
+        let totals = { tot:0, kp:0, kt:0, op:0, comp:0 };
+        
+        timArray.forEach(t => {
+            totals.tot += t.total; totals.kp += t.kp; totals.kt += t.kt; totals.op += t.op; totals.comp += t.comp;
+            let pCt = t.total > 0 ? (t.comp / t.total) * 100 : 0;
+            let tKeyStr = t.tim.replace(/'/g, "\\'"); 
+            
+            tHtml += `
+            <tr class="hover:bg-gray-50 transition border-b border-gray-50">
+                <td class="py-2.5 px-2 font-bold text-gray-800 flex items-center gap-2 text-[10px]"><i class="fa-solid fa-user-group text-blue-500 text-[10px]"></i> ${t.tim}</td>
+                <td class="py-2.5 px-2 text-center font-bold text-gray-800 cursor-pointer hover:text-blue-600 hover:bg-blue-50 transition rounded" onclick="openDashDetail('total', 'all', '${tKeyStr}')">${t.total}</td>
+                <td class="py-2.5 px-2 text-center font-bold text-gray-800 cursor-pointer hover:text-red-600 hover:bg-red-50 transition rounded" onclick="openDashDetail('kp', 'all', '${tKeyStr}')">${t.kp}</td>
+                <td class="py-2.5 px-2 text-center font-bold text-gray-800 cursor-pointer hover:text-orange-600 hover:bg-orange-50 transition rounded" onclick="openDashDetail('kt', 'all', '${tKeyStr}')">${t.kt}</td>
+                <td class="py-2.5 px-2 text-center font-bold text-gray-800 cursor-pointer hover:text-yellow-600 hover:bg-yellow-50 transition rounded" onclick="openDashDetail('op', 'all', '${tKeyStr}')">${t.op}</td>
+                <td class="py-2.5 px-2 text-center font-bold text-gray-800 cursor-pointer hover:text-green-600 hover:bg-green-50 transition rounded" onclick="openDashDetail('comp', 'all', '${tKeyStr}')">${t.comp}</td>
+                <td class="py-2.5 px-2"><div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden"><div class="bg-green-500 h-full rounded-full" style="width: ${pCt}%"></div></div></td>
+            </tr>`;
+        });
+        tBody.innerHTML = tHtml;
+        document.getElementById('ft-tot').innerText = totals.tot.toLocaleString(); document.getElementById('ft-kp').innerText = totals.kp.toLocaleString();
+        document.getElementById('ft-kt').innerText = totals.kt.toLocaleString(); document.getElementById('ft-op').innerText = totals.op.toLocaleString();
+        document.getElementById('ft-comp').innerText = totals.comp.toLocaleString();
+    }
+
+    function openDashDetail(category, type, teamKey = null) {
+        let listData = window.dashFilteredData[category][type] || [];
+        
+        if (teamKey) {
+            listData = listData.filter(item => item.teamKey === teamKey);
+        }
+
+        let tbody = document.getElementById('dash-detail-body');
+        tbody.innerHTML = "";
+        
+        let catName = category === 'total' ? 'Semua Order' : (category === 'kp' ? 'Kendala Pelanggan' : (category === 'kt' ? 'Kendala Teknik' : (category === 'op' ? 'On Progress' : 'Completed')));
+        let typeName = type === 'all' ? 'Seluruh Tipe' : type.toUpperCase();
+        
+        let titlePrefix = teamKey ? `<i class="fa-solid fa-user-group"></i> ${teamKey} - ` : `<i class="fa-solid fa-table-list"></i> `;
+        document.getElementById('dash-modal-title').innerHTML = `${titlePrefix}${catName} (${typeName})`;
+        
+        if (listData.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-gray-400">Tidak ada data.</td></tr>`;
+        } else {
+            let html = "";
+            listData.forEach(item => {
+                let badgeColor = "#3b82f6";
+                if(item.statusText.includes("COMPLETED") || item.statusText.includes("PS")) badgeColor = "#22c55e";
+                else if(item.statusText.includes("KENDALA PELANGGAN")) badgeColor = "#ef4444";
+                else if(item.statusText.includes("KENDALA TEKNIK")) badgeColor = "#f97316";
+                else if(item.statusText.includes("AKTIVASI")) badgeColor = "#15803d";
+                
+                let statusHtml = item.statusText ? `<span class="px-2 py-0.5 rounded text-[9px] font-bold text-white shadow-xs" style="background-color: ${badgeColor};">${item.statusText}</span>` : "-";
+
+                html += `<tr class="hover:bg-blue-50 transition border-b border-gray-100">
+                    <td class="py-2.5 px-3 font-bold text-blue-600 cursor-pointer hover:underline" onclick="openDetailModal(${item.originalIndex})">${item.wo}</td>
+                    <td class="py-2.5 px-3 text-gray-600">${item.crm}</td>
+                    <td class="py-2.5 px-3 text-gray-600">${item.cust}</td>
+                    <td class="py-2.5 px-3 text-gray-600 max-w-[200px] truncate" title="${item.statusText}">${statusHtml}</td>
+                    <td class="py-2.5 px-3 font-semibold text-gray-800 text-[10px]"><i class="fa-solid fa-users text-gray-400 mr-1"></i> ${item.assign}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+        }
+        document.getElementById('dash-modal-count').innerText = `Total: ${listData.length} data`;
+        document.getElementById('dash-detail-modal').classList.remove('hidden');
+    }
+
+    function closeDashDetail() { document.getElementById('dash-detail-modal').classList.add('hidden'); }
+
+    function renderDonutChart(total, comp) {
+        let sisa = total - comp; let ratio = total > 0 ? (comp / total * 100).toFixed(2) : 0;
+        document.getElementById('chart-pct').innerText = ratio + "%"; document.getElementById('ch-tot').innerText = total.toLocaleString();
+        document.getElementById('ch-comp').innerText = comp.toLocaleString(); document.getElementById('ch-sisa').innerText = sisa.toLocaleString();
+        document.getElementById('target-pct-txt').innerText = ratio + "%"; document.getElementById('target-bar').style.width = ratio + "%";
+
+        const ctx = document.getElementById('donutChart').getContext('2d');
+        if (donutChartInstance) donutChartInstance.destroy();
+        donutChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Completed', 'Sisa'], datasets: [{ data: [comp, sisa], backgroundColor: ['#2563eb', '#eff6ff'], borderWidth: 0, hoverOffset: 4 }] }, options: { cutout: '80%', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: true } } } });
+    }
+
+    function extractCoords(addressStr) {
+        let match = addressStr.match(/(-?\d{1,2}\.\d{3,})[,\s]+(11\d\.\d{3,})/);
+        if (match) return [parseFloat(match[1]), parseFloat(match[2])];
+        return null;
+    }
+
+    function addHomeMarker(pt, lat, lng) {
+        let color = '#3b82f6';
+        if(pt.cat === 'comp') color = '#22c55e';
+        else if(pt.cat === 'op') color = '#facc15';
+        else if(pt.cat === 'kp') color = '#ef4444';
+        else if(pt.cat === 'kt') color = '#f97316';
+
+        let iconHtml = `<div class="flex items-center justify-center w-6 h-6 rounded-full shadow-md border-2 border-white" style="background-color: ${color};"><i class="fa-solid fa-house text-white text-[10px]"></i></div>`;
+        let customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
+
+        L.marker([lat, lng], {icon: customIcon})
+         .bindPopup(`<div class="text-xs"><b>WO:</b> ${pt.wo}<br><b>Alamat:</b> ${pt.address}<br><b>Status:</b> <span style="color:${color};font-weight:bold;">${pt.cat.toUpperCase()}</span></div>`)
+         .addTo(mapInstance);
+    }
+
+    function renderMap(mapPoints) {
+        if (!mapInstance) {
+            mapInstance = L.map('map', {zoomControl: false}).setView([-7.2756, 112.7759], 12);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: 'OSM', subdomains: 'abcd', maxZoom: 19 }).addTo(mapInstance);
+        }
+        mapInstance.eachLayer((layer) => { if (layer instanceof L.Marker && !layer._url) mapInstance.removeLayer(layer); });
+
+        geocodeQueue = [];
+        document.getElementById('map-geo-indicator').classList.add('hidden');
+
+        mapPoints.forEach(pt => {
+            let coords = extractCoords(pt.address);
+            if (coords) {
+                addHomeMarker(pt, coords[0], coords[1]);
+            } else if (geocodeCache[pt.address]) {
+                if(geocodeCache[pt.address] !== 'NOT_FOUND') {
+                    addHomeMarker(pt, geocodeCache[pt.address].lat, geocodeCache[pt.address].lng);
+                } else {
+                    addHomeMarker(pt, pt.fallbackLat, pt.fallbackLng);
+                }
+            } else {
+                geocodeQueue.push(pt);
+                addHomeMarker(pt, pt.fallbackLat, pt.fallbackLng);
+            }
+        });
+
+        setTimeout(() => { mapInstance.invalidateSize(); }, 300);
+
+        if(!isGeocoding && geocodeQueue.length > 0) {
+            document.getElementById('map-geo-indicator').classList.remove('hidden');
+            processGeocodeQueue();
+        }
+    }
+
+    async function processGeocodeQueue() {
+        if (geocodeQueue.length === 0) { 
+            isGeocoding = false; 
+            document.getElementById('map-geo-indicator').classList.add('hidden');
+            return; 
+        }
+        
+        isGeocoding = true;
+        let pt = geocodeQueue.shift();
+        
+        try {
+            let searchAddr = pt.address.replace(/[\n\r]+/g, ' ').trim();
+            if(!searchAddr.toLowerCase().includes('surabaya')) searchAddr += ", Surabaya, Indonesia";
+            else searchAddr += ", Indonesia";
+            
+            let response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(searchAddr)}`, { headers: { 'Accept-Language': 'id-ID' } });
+            let data = await response.json();
+            
+            if (data && data.length > 0) {
+                geocodeCache[pt.address] = { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+            } else {
+                geocodeCache[pt.address] = 'NOT_FOUND';
+            }
+            
+            localStorage.setItem('sympro_geocode_cache', JSON.stringify(geocodeCache));
+            
+        } catch(e) {
+            geocodeQueue.unshift(pt); 
+            await new Promise(r => setTimeout(r, 3000));
+        }
+        
+        setTimeout(processGeocodeQueue, 1500);
+    }
+
+    function fetchGlobalUnassignedBadge() {
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) {
+            if(res && res.success && res.rows) {
+                let leaderIdx = res.headers.findIndex(h => String(h).trim().toUpperCase() === 'LEADER');
+                let memberIdx = res.headers.findIndex(h => String(h).trim().toUpperCase() === 'MEMBER');
+                let unassignedCount = 0;
+                res.rows.forEach(r => {
+                    let l = leaderIdx !== -1 ? String(r[leaderIdx]).trim() : "-";
+                    let m = memberIdx !== -1 ? String(r[memberIdx]).trim() : "-";
+                    if (!l || l === "-" || !m || m === "-") unassignedCount++;
+                });
+                const badge = document.getElementById('unassigned-badge');
+                if (badge) { if (unassignedCount > 0) { badge.innerText = unassignedCount; badge.classList.remove('hidden'); } else badge.classList.add('hidden'); }
+            }
+        }).getDailyOrderData();
+    }
+
+    function fetchMasterData() {
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) { if(res.success) { techniciansCache = res.technicians; populateTechSelectOptions(); } }).getMasterTechnicians();
+        google.script.run.withSuccessHandler(function(res) { if(res.success) errorCodesCache = res.errorCodes; }).getMasterErrorCodes();
+    }
+
+    function populateTechSelectOptions(editingTeamName = null) {
+        const mLeader = document.getElementById('map-leader'); const mMember = document.getElementById('map-member');
+        if(!mLeader || !mMember) return;
+        let assignedTechs = new Set();
+        mappingTimCache.forEach(m => { if(editingTeamName && m.tim === editingTeamName) return; if(m.leader) assignedTechs.add(m.leader); if(m.member) assignedTechs.add(m.member); });
+        let availableTechs = techniciansCache.filter(t => !assignedTechs.has(t));
+        let opts = `<option value="">-- Pilih --</option>`; availableTechs.forEach(t => { opts += `<option value="${t}">${t}</option>`; });
+        mLeader.innerHTML = opts; mMember.innerHTML = opts;
+    }
+
+    function loadMappingTimData() {
+        const tbody = document.getElementById('mapping-tim-body');
+        if(!tbody || typeof google === 'undefined') return;
+        tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat tim...</td></tr>`;
+        google.script.run.withSuccessHandler(function(res) {
+            if(res.success) { mappingTimCache = res.data; renderMappingTimTable(); populateTechSelectOptions(); } 
+            else tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-red-500">${res.message}</td></tr>`;
+        }).getMappingTim();
+    }
+
+    function renderMappingTimTable() {
+        const tbody = document.getElementById('mapping-tim-body');
+        if(mappingTimCache.length === 0) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-6 text-gray-400">Belum ada mapping tim.</td></tr>`; return; }
+        let html = "";
+        mappingTimCache.forEach(item => {
+            html += `<tr class="hover:bg-gray-50 transition border-b border-gray-50"><td class="py-2.5 px-4 font-bold text-gray-800">${item.tim}</td><td class="py-2.5 px-4 text-gray-600">${item.leader}</td><td class="py-2.5 px-4 text-gray-600">${item.member}</td><td class="py-2.5 px-4 text-center"><button onclick="editMappingTim('${item.tim}')" class="px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-600 rounded-lg text-[11px] font-bold transition flex items-center gap-1 mx-auto"><i class="fa-solid fa-pen-to-square"></i> Edit</button></td></tr>`;
+        });
+        tbody.innerHTML = html;
+    }
+
+    function editMappingTim(timName) {
+        const team = mappingTimCache.find(t => t.tim === timName); if (!team) return;
+        document.getElementById('map-tim-name').value = team.tim; document.getElementById('map-form-title').innerText = "Edit Mapping Tim: " + team.tim;
+        document.getElementById('btn-cancel-edit').classList.remove('hidden');
+        populateTechSelectOptions(team.tim);
+        setTimeout(() => { document.getElementById('map-leader').value = team.leader; document.getElementById('map-member').value = team.member; }, 50);
+    }
+
+    function resetMappingForm() {
+        document.getElementById('map-tim-name').value = ""; document.getElementById('map-form-title').innerText = "Buat Mapping Baru";
+        document.getElementById('btn-cancel-edit').classList.add('hidden'); populateTechSelectOptions();
+    }
+
+    function saveMappingTim() {
+        const tim = document.getElementById('map-tim-name').value; const leader = document.getElementById('map-leader').value; const member = document.getElementById('map-member').value;
+        if(!tim || !leader || !member) { showMessage("Lengkapi Nama Tim, Leader, dan Member!", "error"); return; }
+        document.getElementById('mapping-loading').classList.remove('hidden');
+        if (typeof google !== 'undefined') {
+            google.script.run.withSuccessHandler(function(res) {
+                document.getElementById('mapping-loading').classList.add('hidden');
+                if(res.success) { showMessage(res.message, "success"); resetMappingForm(); loadMappingTimData(); } 
+                else showMessage(res.message, "error");
+            }).saveMappingTim(tim, leader, member);
+        }
+    }
+
+    function confirmDeleteAllMappingTim() {
+        if (mappingTimCache.length === 0) return showMessage("Daftar Tim Aktif kosong.", "error");
+        if (typeof google !== 'undefined') {
+            document.getElementById('mapping-tim-body').innerHTML = `<tr><td colspan="4" class="text-center py-6 text-red-500 font-semibold"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Menghapus...</td></tr>`;
+            google.script.run.withSuccessHandler(function(res) { showMessage(res.message, res.success ? "success" : "error"); resetMappingForm(); loadMappingTimData(); }).deleteAllMappingTim();
+        }
+    }
+
+    function showMessage(msg, type = 'error') {
+        const toast = document.getElementById('toast'); const icon = document.getElementById('toast-icon'); const text = document.getElementById('toast-msg');
+        toast.className = 'fixed top-8 left-1/2 transform -translate-x-1/2 px-6 py-4 rounded-xl shadow-2xl text-sm font-bold transition-all duration-300 z-50 flex items-center gap-3';
+        if(type === 'success') { toast.classList.add('bg-[#10b981]', 'text-white'); icon.className = 'fa-solid fa-circle-check text-lg'; } 
+        else { toast.classList.add('bg-[#ef4444]', 'text-white'); icon.className = 'fa-solid fa-circle-exclamation text-lg'; }
+        text.innerText = msg; toast.style.opacity = '1'; setTimeout(() => { toast.style.opacity = '0'; }, 3500);
+    }
+
+    function switchView(view) {
+        document.getElementById('view-login').classList.add('hidden'); document.getElementById('view-signup').classList.add('hidden');
+        document.getElementById('view-otp').classList.add('hidden'); document.getElementById('view-' + view).classList.remove('hidden');
+    }
+
+    function togglePassword(inputId, iconElement) {
+        const input = document.getElementById(inputId);
+        if (input.type === "password") { input.type = "text"; iconElement.classList.replace('fa-eye-slash', 'fa-eye'); } 
+        else { input.type = "password"; iconElement.classList.replace('fa-eye', 'fa-eye-slash'); }
+    }
+
+    function doRegister() {
+        const data = { namaLengkap: document.getElementById('reg-nama').value, email: document.getElementById('reg-email').value, username: document.getElementById('reg-username').value, chatId: document.getElementById('reg-chatid').value, password: document.getElementById('reg-pass').value };
+        if(!data.namaLengkap || !data.email || !data.username || !data.chatId || !data.password) { showMessage("Lengkapi seluruh form!", "error"); return; }
+        document.getElementById('reg-loading').classList.remove('hidden');
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) { document.getElementById('reg-loading').classList.add('hidden'); showMessage(res.message, res.success ? 'success' : 'error'); if(res.success) setTimeout(() => switchView('login'), 1500); }).registerUser(data);
+    }
+
+    function doLogin() {
+        const user = document.getElementById('login-user').value; const pass = document.getElementById('login-pass').value;
+        if(!user || !pass) { showMessage("Isi Email/Username dan Password!", "error"); return; }
+        document.getElementById('login-loading').classList.remove('hidden'); tempUser = user;
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) {
+            document.getElementById('login-loading').classList.add('hidden');
+            if(res.success && res.requireOtp) { showMessage(res.message, 'success'); setTimeout(() => switchView('otp'), 1000); } 
+            else showMessage(res.message, 'error');
+        }).processLogin(user, pass);
+    }
+
+    function doVerifyOTP() {
+        const otp = document.getElementById('otp-input').value;
+        if(!otp || otp.length < 6) { showMessage("Masukkan 6 digit kode OTP!", "error"); return; }
+        document.getElementById('otp-loading').classList.remove('hidden');
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) {
+            document.getElementById('otp-loading').classList.add('hidden');
+            if(res.success) {
+                let roleName = res.role || "user"; let realName = res.name || tempUser;
+                localStorage.setItem("sym_pro_user", realName); localStorage.setItem("sym_pro_role", roleName);
+                showMessage("Berhasil! Mengalihkan...", 'success');
+                setTimeout(() => { document.getElementById('auth-bg').style.display = 'none'; document.getElementById('auth-card-container').style.display = 'none'; document.getElementById('dashboard-wrapper').classList.remove('hidden'); document.getElementById('user-role-badge').innerText = "Role: " + roleName.toUpperCase(); applyRoleAccess(roleName); switchMenu('daily-report'); loadRecentImports(); }, 1200);
+            } else showMessage(res.message, 'error');
+        }).verifyOTP(tempUser, otp);
+    }
+
+    function toggleSubMenu(id) { const submenu = document.getElementById(id); const arrow = document.getElementById('arrow-workorder'); submenu.classList.toggle('hidden'); if (arrow) arrow.classList.toggle('rotate-180'); }
+
+    function switchMenu(menuName) {
+        ['dashboard', 'daily-report', 'order-hi', 'daily-order', 'order-kendala', 'order-completed', 'data-kendala', 'board-kendala', 'update-data', 'manage-user', 'mapping-tim'].forEach(m => {
+            const el = document.getElementById('menu-' + m);
+            if(el) { el.classList.remove('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); el.classList.add('text-gray-600', 'font-medium'); }
+        });
+        const activeEl = document.getElementById('menu-' + menuName);
+        if(activeEl) { activeEl.classList.remove('text-gray-600', 'font-medium'); activeEl.classList.add('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); }
+
+        ['dashboard', 'daily-report', 'daily-order', 'mapping-tim', 'manage-user', 'update-data'].forEach(view => { const wrapper = document.getElementById('view-wrapper-' + view); if(wrapper) wrapper.classList.add('hidden'); });
+
+        if(menuName === 'daily-report') { 
+            currentActiveMode = 'daily-report';
+            document.getElementById('view-wrapper-daily-report').classList.remove('hidden'); loadDashboardData(); 
+        } 
+        else if(menuName === 'update-data') { document.getElementById('view-wrapper-update-data').classList.remove('hidden'); loadRecentImports(); } 
+        else if(menuName === 'mapping-tim') { document.getElementById('view-wrapper-mapping-tim').classList.remove('hidden'); } 
+        else if(menuName === 'manage-user') { const w = document.getElementById('view-wrapper-manage-user'); if(w) w.classList.remove('hidden'); loadUserManagementData(); } 
+        else if(menuName === 'daily-order' || menuName === 'order-hi' || menuName === 'order-kendala' || menuName === 'order-completed') {
+            currentActiveMode = menuName; document.getElementById('view-wrapper-daily-order').classList.remove('hidden');
+            let titleHtml = `<i class="fa-solid fa-list-check text-[#0d55d4] mr-2"></i> `;
+            if(menuName === 'daily-order') titleHtml += "List Daily Order"; else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; else if(menuName === 'order-kendala') titleHtml += "Order Kendala"; else if(menuName === 'order-completed') titleHtml += "Order Completed";
+            document.getElementById('view-title').innerHTML = titleHtml; loadActiveOrderData();
+        }
+    }
+
+    function loadUserManagementData() {
+        const tbody = document.getElementById('manage-user-body'); if(!tbody || typeof google === 'undefined') return;
+        tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data User...</td></tr>`;
+        google.script.run.withSuccessHandler(function(res) {
+            if(!res.success || !res.users) { tbody.innerHTML = `<tr><td colspan="5" class="text-center py-6 text-red-500 font-semibold">${res.message || 'Gagal'}</td></tr>`; return; }
+            let bodyHtml = "";
+            res.users.forEach((u) => {
+                let statusBadge = u.status === 'active' ? `<span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded">ACTIVE</span>` : `<span class="bg-amber-100 text-amber-700 text-[10px] font-bold px-2 py-0.5 rounded">PENDING</span>`;
+                let actionBtn = u.status !== 'active' ? `<button onclick="approveUser('${u.username}')" class="px-3 py-1 bg-[#0d55d4] hover:bg-[#0b47b5] text-white rounded-lg font-semibold text-[10px] transition shadow-xs"><i class="fa-solid fa-check mr-1"></i> Approve</button>` : `<span class="text-gray-300 text-[10px] italic">Approved</span>`;
+                bodyHtml += `<tr class="hover:bg-gray-50 transition border-b border-gray-50"><td class="py-3 px-4 text-gray-800 font-medium">${u.nama}</td><td class="py-3 px-4 text-gray-600">${u.username}</td><td class="py-3 px-4 text-gray-600">${u.role}</td><td class="py-3 px-4 text-center">${statusBadge}</td><td class="py-3 px-4 text-center">${actionBtn}</td></tr>`;
+            });
+            tbody.innerHTML = bodyHtml;
+        }).getAllUsers();
+    }
+    
+    function approveUser(username) { if (typeof google === 'undefined') return; google.script.run.withSuccessHandler(function(res) { showMessage(res.message, res.success ? 'success' : 'error'); if(res.success) loadUserManagementData(); }).approveUserByAdmin(username); }
+    function toggleDropdown(dropdownId, event) { event.stopPropagation(); document.querySelectorAll('.multiselect-content').forEach(el => { if(el.id !== 'content-' + dropdownId.split('-')[1]) el.classList.remove('show'); }); document.getElementById('content-' + dropdownId.split('-')[1]).classList.toggle('show'); }
+    function closeAllDropdowns(event) { if(!event.target.closest('.multiselect-dropdown')) document.querySelectorAll('.multiselect-content').forEach(el => el.classList.remove('show')); }
+    function updateDropdownLabel(type) { const checkboxes = document.querySelectorAll(`.cb-${type}:checked`); const label = document.getElementById(`label-${type}`); if(checkboxes.length === 0) label.innerText = type === 'crm' ? 'CRM Order Type' : (type === 'jenis' ? 'Status' : (type === 'suberrorcode' ? 'SUBERRORCODE' : 'ERRORCODE')); else if(checkboxes.length === 1) label.innerText = checkboxes[0].value; else label.innerText = `${checkboxes.length} dipilih`; }
+
+    const TARGET_COLUMNS = ["Workorder", "Date Created", "Booking Date", "Order ID TSEL", "CRM Order Type", "Service No.", "Customer Name", "Address", "Assigned To", "Update"];
+
+    function loadActiveOrderData(forceRefresh = false) {
+        const cacheKey = getCacheKeyForMode(currentActiveMode);
+        if (!forceRefresh && modeDataCache[cacheKey]) { globalDailyHeaders = modeDataCache[cacheKey].headers || []; globalDailyRows = modeDataCache[cacheKey].rows || []; populateMultiSelectFilters(); applyFilters(); return; }
+        const tbody = document.getElementById('daily-order-body'); tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
+        if (typeof google === 'undefined') return;
+        const successHandler = function(res) {
+            if(!res || !res.success) { tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">${res ? res.message : 'Respon kosong'}</td></tr>`; return; }
+            modeDataCache[cacheKey] = { headers: res.headers || [], rows: res.rows || [] }; globalDailyHeaders = modeDataCache[cacheKey].headers; globalDailyRows = modeDataCache[cacheKey].rows; populateMultiSelectFilters(); applyFilters();
+        };
+        const failureHandler = function(err) { tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">Error Server: ${err.message}</td></tr>`; };
+        if (currentActiveMode === 'order-kendala') google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getOrderKendalaData(); else if (currentActiveMode === 'order-completed') google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getOrderCompletedData(); else google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getDailyOrderData();
+    }
+
+    function reloadActiveTable() {
+        if (currentActiveMode === 'daily-order' || currentActiveMode === 'order-hi' || currentActiveMode === 'daily-report') {
+            showMessage("Memeriksa dan menyinkronkan data baru...", "success"); if (typeof google === 'undefined') { 
+                if(currentActiveMode === 'daily-report') loadDashboardData(); else loadActiveOrderData(true); 
+                return; 
+            }
+            google.script.run.withSuccessHandler(function(res) {
+                if (res && res.success) { if (res.added > 0) showMessage(res.message, 'success'); else showMessage("Data tersinkronisasi. " + res.message, 'success'); } else if (res && res.message) showMessage(res.message, 'error');
+                modeDataCache['list-daily-order'] = null; 
+                if(currentActiveMode === 'daily-report') loadDashboardData(); else loadActiveOrderData(true);
+                fetchGlobalUnassignedBadge();
+            }).withFailureHandler(function(err) { 
+                showMessage("Gagal sinkronisasi: " + err.message, 'error'); 
+                if(currentActiveMode === 'daily-report') loadDashboardData(); else loadActiveOrderData(true); 
+            }).syncNewOrdersFromUpdateData();
+        } else { const cacheKey = getCacheKeyForMode(currentActiveMode); modeDataCache[cacheKey] = null; loadActiveOrderData(true); }
+    }
+
+    function populateMultiSelectFilters() {
+        if(!globalDailyHeaders || globalDailyHeaders.length === 0) return;
+        let crmTypeIdx = -1, jenisErrorIdx = -1, errorcodeIdx = -1, suberrorcodeIdx = -1;
+        globalDailyHeaders.forEach((h, idx) => { let hClean = String(h).trim().toLowerCase(); if(hClean === 'crm order type') crmTypeIdx = idx; if(hClean === 'jenis_error') jenisErrorIdx = idx; if(hClean === 'errorcode') errorcodeIdx = idx; if(hClean === 'suberrorcode') suberrorcodeIdx = idx; });
+        const crmContent = document.getElementById('content-crm'); crmContent.innerHTML = "";
+        if(crmTypeIdx !== -1) { let uniqueCrm = [...new Set(globalDailyRows.map(r => String(r[crmTypeIdx] || "").trim()))].filter(v => v !== ""); uniqueCrm.sort().forEach(val => { crmContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-crm" onchange="updateDropdownLabel('crm')"><span>${val}</span></label>`; }); } updateDropdownLabel('crm');
+        const jenisContent = document.getElementById('content-jenis'); jenisContent.innerHTML = "";
+        if(jenisErrorIdx !== -1) { let uniqueJenis = [...new Set(globalDailyRows.map(r => String(r[jenisErrorIdx] || "").trim()))].filter(v => v !== ""); uniqueJenis.sort().forEach(val => { jenisContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-jenis" onchange="updateDropdownLabel('jenis')"><span>${val}</span></label>`; }); } updateDropdownLabel('jenis');
+        const errContent = document.getElementById('content-errorcode'); errContent.innerHTML = "";
+        if(errorcodeIdx !== -1) { let uniqueErr = [...new Set(globalDailyRows.map(r => String(r[errorcodeIdx] || "").trim()))].filter(v => v !== ""); uniqueErr.sort().forEach(val => { errContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-errorcode" onchange="onErrorCodeFilterChange()"><span>${val}</span></label>`; }); } updateDropdownLabel('errorcode');
+        updateSubErrorCodeOptions();
+    }
+
+    function onErrorCodeFilterChange() { updateDropdownLabel('errorcode'); updateSubErrorCodeOptions(); }
+
+    function updateSubErrorCodeOptions() {
+        const subErrContent = document.getElementById('content-suberrorcode'); if(!subErrContent) return;
+        const selectedErrors = Array.from(document.querySelectorAll('.cb-errorcode:checked')).map(cb => cb.value); const currentlyCheckedSub = new Set(Array.from(document.querySelectorAll('.cb-suberrorcode:checked')).map(cb => cb.value));
+        let availableSubErrors = new Set();
+        if (selectedErrors.length > 0) {
+            errorCodesCache.forEach(item => { if (selectedErrors.includes(item.errorCode) && item.subErrorCode) availableSubErrors.add(item.subErrorCode); });
+            let errorcodeIdx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === 'errorcode'); let suberrorcodeIdx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === 'suberrorcode');
+            if (errorcodeIdx !== -1 && suberrorcodeIdx !== -1) { globalDailyRows.forEach(r => { let eVal = String(r[errorcodeIdx] || "").trim(); let subVal = String(r[suberrorcodeIdx] || "").trim(); if (selectedErrors.includes(eVal) && subVal) availableSubErrors.add(subVal); }); }
+        } else {
+            let suberrorcodeIdx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === 'suberrorcode');
+            if (suberrorcodeIdx !== -1) { globalDailyRows.forEach(r => { let subVal = String(r[suberrorcodeIdx] || "").trim(); if (subVal) availableSubErrors.add(subVal); }); }
+            errorCodesCache.forEach(item => { if (item.subErrorCode) availableSubErrors.add(item.subErrorCode); });
+        }
+        subErrContent.innerHTML = ""; let sortedSub = Array.from(availableSubErrors).filter(Boolean).sort();
+        sortedSub.forEach(val => { let isChecked = currentlyCheckedSub.has(val) ? "checked" : ""; subErrContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" ${isChecked} class="custom-checkbox cb-suberrorcode" onchange="updateDropdownLabel('suberrorcode')"><span>${val}</span></label>`; }); updateDropdownLabel('suberrorcode');
+    }
+
+    function applyFilters() {
+        if(!globalDailyHeaders || globalDailyHeaders.length === 0) { renderTable([]); return; }
+        const searchQuery = document.getElementById('filter-search').value.toLowerCase().trim();
+        const selectedCrms = Array.from(document.querySelectorAll('.cb-crm:checked')).map(cb => cb.value); const selectedJenis = Array.from(document.querySelectorAll('.cb-jenis:checked')).map(cb => cb.value); const selectedErrors = Array.from(document.querySelectorAll('.cb-errorcode:checked')).map(cb => cb.value); const selectedSubErrors = Array.from(document.querySelectorAll('.cb-suberrorcode:checked')).map(cb => cb.value);
+        let workorderIdx = -1, trackIdIdx = -1, crmTypeIdx = -1, jenisErrorIdx = -1, errorcodeIdx = -1, suberrorcodeIdx = -1, leaderIdx = -1, memberIdx = -1;
+        globalDailyHeaders.forEach((h, idx) => { let hClean = String(h).trim().toLowerCase(); if(hClean.includes('workorder')) workorderIdx = idx; if(hClean === 'order id tsel') trackIdIdx = idx; else if(trackIdIdx === -1 && (hClean.includes('sc order no') || hClean.includes('csrm'))) trackIdIdx = idx; if(hClean === 'crm order type') crmTypeIdx = idx; if(hClean === 'jenis_error') jenisErrorIdx = idx; if(hClean === 'errorcode') errorcodeIdx = idx; if(hClean === 'suberrorcode') suberrorcodeIdx = idx; if(hClean === 'leader') leaderIdx = idx; if(hClean === 'member') memberIdx = idx; });
+
+        let filtered = globalDailyRows.filter(row => {
+            if (currentActiveMode === 'daily-order' || currentActiveMode === 'order-hi') {
+                let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : ""; let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : ""; let isAssigned = (leader !== "" && leader !== "-") && (member !== "" && member !== "-");
+                if (currentActiveMode === 'daily-order' && isAssigned) return false; if (currentActiveMode === 'order-hi' && !isAssigned) return false;
+            }
+            let matchSearch = true;
+            if(searchQuery !== "") { let woVal = workorderIdx !== -1 ? String(row[workorderIdx] || "").toLowerCase() : ""; let trVal = trackIdIdx !== -1 ? String(row[trackIdIdx] || "").toLowerCase() : ""; matchSearch = woVal.includes(searchQuery) || trVal.includes(searchQuery); }
+            let matchCrm = true; if(selectedCrms.length > 0 && crmTypeIdx !== -1) matchCrm = selectedCrms.includes(String(row[crmTypeIdx] || "").trim());
+            let matchJenis = true; if(selectedJenis.length > 0 && jenisErrorIdx !== -1) matchJenis = selectedJenis.includes(String(row[jenisErrorIdx] || "").trim());
+            let matchErrorcode = true; if(selectedErrors.length > 0 && errorcodeIdx !== -1) matchErrorcode = selectedErrors.includes(String(row[errorcodeIdx] || "").trim());
+            let matchSubError = true; if(selectedSubErrors.length > 0 && suberrorcodeIdx !== -1) matchSubError = selectedSubErrors.includes(String(row[suberrorcodeIdx] || "").trim());
+            return matchSearch && matchCrm && matchJenis && matchErrorcode && matchSubError;
+        });
+        if (currentSortCol) { filtered.sort((a, b) => { let valA = getCellValByColName(a, currentSortCol); let valB = getCellValByColName(b, currentSortCol); let res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }); return currentSortDir === 'asc' ? res : -res; }); }
+        renderTable(filtered);
+    }
+
+    function getCellValByColName(row, colName) {
+        if (colName === "Assigned To") { let lIdx = globalDailyHeaders.findIndex(h => String(h).trim().toUpperCase() === 'LEADER'); let mIdx = globalDailyHeaders.findIndex(h => String(h).trim().toUpperCase() === 'MEMBER'); return (lIdx !== -1 ? row[lIdx] : "") + " " + (mIdx !== -1 ? row[mIdx] : ""); } 
+        else if (colName === "Update") { let eIdx = globalDailyHeaders.findIndex(h => String(h).trim().toUpperCase() === 'ERRORCODE'); let memoIdx = globalDailyHeaders.findIndex(h => String(h).trim().toUpperCase() === 'ENGINEERMEMO (SA)'); return (eIdx !== -1 ? row[eIdx] : "") + " " + (memoIdx !== -1 ? row[memoIdx] : ""); } 
+        else if (colName === "Order ID TSEL") { let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === "order id tsel"); if (idx === -1) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); return idx !== -1 ? row[idx] : ""; } 
+        else { let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === colName.toLowerCase()); return idx !== -1 && row[idx] !== undefined && row[idx] !== null ? row[idx] : ""; }
+    }
+
+    function sortByColumn(colName) { if (currentSortCol === colName) currentSortDir = (currentSortDir === 'asc') ? 'desc' : 'asc'; else { currentSortCol = colName; currentSortDir = 'asc'; } applyFilters(); }
+
+    function resetFilters() { document.getElementById('filter-search').value = ""; document.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false); updateDropdownLabel('crm'); updateDropdownLabel('jenis'); updateDropdownLabel('errorcode'); updateDropdownLabel('suberrorcode'); currentSortCol = null; currentSortDir = 'asc'; applyFilters(); showMessage("Filter dan urutan berhasil direset.", "success"); }
+
+    function renderTable(rowsToRender) {
+        const thead = document.getElementById('daily-order-head'); const tbody = document.getElementById('daily-order-body');
+        function getColVal(row, colName) {
+            if (colName === "Order ID TSEL") { let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === "order id tsel"); if (idx === -1) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : ""; }
+            let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === colName.toLowerCase()); return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : "";
+        }
+        let headHtml = `<tr class="text-[11px] uppercase tracking-wider"><th class="py-3 px-3 text-center sticky-head-aksi">Aksi</th>`;
+        TARGET_COLUMNS.forEach(colName => { let sortIcon = `<i class="fa-solid fa-sort text-blue-200 text-[10px] ml-1"></i>`; if (currentSortCol === colName) sortIcon = currentSortDir === 'asc' ? `<i class="fa-solid fa-sort-up text-amber-300 text-[11px] ml-1"></i>` : `<i class="fa-solid fa-sort-down text-amber-300 text-[11px] ml-1"></i>`; let headerBtn = `<button onclick="sortByColumn('${colName}')" class="flex items-center gap-1 hover:text-amber-200 transition focus:outline-none uppercase font-bold">${colName} ${sortIcon}</button>`; if (colName === "Workorder") headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-wo">${headerBtn}</th>`; else headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-other">${headerBtn}</th>`; }); 
+        headHtml += `</tr>`; thead.innerHTML = headHtml;
+        
+        let validRows = rowsToRender.filter(row => { let wo = String(getColVal(row, "Workorder")).trim(); let track = String(getColVal(row, "Order ID TSEL")).trim(); let cust = String(getColVal(row, "Customer Name")).trim(); return (wo !== "" && !wo.toUpperCase().includes("WORKORDER")) || (track !== "" && !track.toUpperCase().includes("SC ORDER NO") && !track.toUpperCase().includes("ORDER ID TSEL")) || (cust !== "" && !cust.toUpperCase().includes("CUSTOMER NAME")); });
+        
+        document.getElementById('table-row-count').innerText = `Menampilkan ${validRows.length} data`;
+        if(validRows.length === 0) { tbody.innerHTML = `<tr><td colspan="${TARGET_COLUMNS.length + 1}" class="text-center py-6 text-gray-400">Tidak ada data yang cocok dengan filter.</td></tr>`; return; }
+
+        let bodyHtml = "";
+        validRows.forEach((row) => {
+            let originalIndex = globalDailyRows.indexOf(row);
+            bodyHtml += `<tr class="table-row-data transition-colors border-b border-gray-100"><td class="py-2.5 px-3 text-center sticky-aksi"><button onclick="openDetailModal(${originalIndex})" class="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-[#0d55d4] rounded-lg font-medium text-[11px] transition cursor-pointer"><i class="fa-solid fa-eye mr-1"></i> Detail</button></td>`;
+            TARGET_COLUMNS.forEach(colName => {
+                let valHtml = "";
+                if (colName === "Assigned To") { let leader = getColVal(row, "LEADER"); let member = getColVal(row, "MEMBER"); valHtml = `<div class="leading-relaxed"><div>👷🏻 Leader : <span class="font-semibold text-gray-800">${leader || "-"}</span></div><div>👷🏻 Member : <span class="font-semibold text-gray-800">${member || "-"}</span></div></div>`; } 
+                else if (colName === "CRM Order Type") { let upperCrm = String(getColVal(row, colName)).trim().toUpperCase(); if (upperCrm === "CREATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #46bdc6;">CREATE</span>`; else if (upperCrm === "MIGRATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #ff6d01;">MIGRATE</span>`; else if (upperCrm === "MODIFY") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #fbbc04; color: #1e293b;">MODIFY</span>`; else valHtml = upperCrm || "-"; } 
+                else if (colName === "Update") {
+                    let err = getColVal(row, "ERRORCODE"); let subErr = getColVal(row, "SUBERRORCODE"); let memo = getColVal(row, "ENGINEERMEMO (SA)"); let jenisErr = getColVal(row, "JENIS_ERROR") || getColVal(row, "STATUS") || "";
+                    let comboText = `${err} ${subErr} ${memo} ${jenisErr}`.toUpperCase(); let badgeHtml = "";
+                    if (comboText.includes("KENDALA PELANGGAN")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #ffedd5; color: #c2410c;">KENDALA PELANGGAN</span>`;
+                    else if (comboText.includes("KENDALA TEKNIK")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #fee2e2; color: #dc2626;">KENDALA TEKNIK / JARINGAN</span>`;
+                    else if (comboText.includes("AKTIVASI")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #dcfce7; color: #15803d;">AKTIVASI</span>`;
+                    else if (comboText.includes("COMPLETED") || comboText.includes("PS")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-xs" style="background-color: #34a853;">COMPLETED (PS)</span>`;
+                    let errPart = (err || subErr) ? `${err}${subErr ? ' - ' + subErr : ''}` : ""; let details = errPart ? `<span class="font-semibold text-gray-800">${errPart}</span>` : "";
+                    if (memo) details += (details ? ` <span class="text-gray-300">|</span> ` : "") + `<span class="italic text-gray-500">${memo}</span>`;
+                    valHtml = badgeHtml ? `<div class="flex items-center gap-1.5 flex-wrap">${badgeHtml} ${details}</div>` : (details || "-");
+                } else valHtml = getColVal(row, colName);
+                
+                if (colName === "Workorder") bodyHtml += `<td class="py-2.5 px-3 text-gray-800 font-bold whitespace-nowrap sticky-wo">${valHtml}</td>`; else bodyHtml += `<td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">${valHtml}</td>`;
+            });
+            bodyHtml += `</tr>`;
+        });
+        tbody.innerHTML = bodyHtml;
+    }
+
+    function openDetailModal(rowIndex) {
+        currentEditingRowIndex = rowIndex; isOrderEditMode = false; document.getElementById('btn-edit-order').innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Update`;
+        document.getElementById('btn-edit-order').className = "px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#0d55d4] rounded-lg font-semibold text-[11px] transition";
+        renderModalContent(); document.getElementById('detail-modal').classList.remove('hidden');
+    }
+
+    function renderModalContent() {
+        const rowData = globalDailyRows[currentEditingRowIndex];
+        function getVal(colName) { let targetClean = colName.toLowerCase(); let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === targetClean); if (idx === -1 && targetClean.includes("order id tsel")) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); return (idx !== -1 && rowData[idx] !== undefined && rowData[idx] !== null && String(rowData[idx]).trim() !== "") ? rowData[idx] : "-"; }
+        let contactNum = getVal("Contact Number"); let cleanPhone = String(contactNum).replace(/[^0-9+]/g, ''); if(cleanPhone.startsWith('0')) cleanPhone = '62' + cleanPhone.slice(1);
+        let actionBtnHtml = (contactNum !== "-" && cleanPhone.length >= 8) ? `<a href="https://wa.me/${cleanPhone}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()" title="Chat WhatsApp" class="w-8 h-8 flex items-center justify-center bg-[#25D366] hover:bg-[#1ebd57] hover:scale-105 text-white rounded-full shadow-md transition-all cursor-pointer relative z-50"><i class="fa-brands fa-whatsapp text-lg"></i></a>` : "";
+        document.getElementById('seg-customer').innerHTML = `<div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Customer Name</span><span class="text-xs font-semibold text-gray-800">${getVal("Customer Name")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><span class="block text-[10px] font-bold text-gray-400 uppercase">Address</span><span class="text-xs font-semibold text-gray-800">${getVal("Address")}</span></div><div class="bg-gray-50 p-3 rounded-xl border border-gray-100 sm:col-span-2 flex items-center justify-between"><div><span class="block text-[10px] font-bold text-gray-400 uppercase mb-0.5">Contact Number</span><span class="text-xs font-semibold text-gray-800 tracking-wide">${contactNum}</span></div>${actionBtnHtml}</div>`;
+        if(!isOrderEditMode) { document.getElementById('seg-order').innerHTML = `<div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">CRM Order Type</span><span class="text-xs font-semibold text-gray-800">${getVal("CRM Order Type")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Workorder</span><span class="text-xs font-semibold text-gray-800">${getVal("Workorder")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><span class="block text-[10px] font-bold text-gray-400 uppercase">Order ID TSEL</span><span class="text-xs font-semibold text-gray-800 break-all">${getVal("Order ID TSEL")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Service No.</span><span class="text-xs font-semibold text-gray-800">${getVal("Service No.")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Package Info</span><span class="text-xs font-semibold text-gray-800">${getVal("PACKAGE_INFO")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Date Created</span><span class="text-xs font-semibold text-gray-800">${getVal("Date Created")}</span></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><span class="block text-[10px] font-bold text-gray-400 uppercase">Booking Date</span><span class="text-xs font-semibold text-gray-800">${getVal("Booking Date")}</span></div>`; } 
+        else { document.getElementById('seg-order').innerHTML = `<div><label class="block text-[10px] font-bold text-gray-500 mb-1">CRM Order Type</label><input type="text" id="edit-crm" class="input-field pl-3" value="${getVal("CRM Order Type")}"></div><div><label class="block text-[10px] font-bold text-gray-500 mb-1">Workorder</label><input type="text" id="edit-wo" class="input-field pl-3" value="${getVal("Workorder")}"></div><div class="sm:col-span-2"><label class="block text-[10px] font-bold text-gray-500 mb-1">Order ID TSEL</label><input type="text" id="edit-track" class="input-field pl-3" value="${getVal("Order ID TSEL")}"></div><div><label class="block text-[10px] font-bold text-gray-500 mb-1">Service No.</label><input type="text" id="edit-service" class="input-field pl-3" value="${getVal("Service No.")}"></div><div><label class="block text-[10px] font-bold text-gray-500 mb-1">Package Info</label><input type="text" id="edit-pkg" class="input-field pl-3" value="${getVal("PACKAGE_INFO")}"></div>`; }
+        let leader = getVal("LEADER"); let member = getVal("MEMBER"); let errCode = getVal("ERRORCODE"); let subErrCode = getVal("SUBERRORCODE"); let engineerMemo = getVal("ENGINEERMEMO (SA)"); let assignDate = getVal("Assign Date") !== "-" ? getVal("Assign Date") : (getVal("Waktu Assign") !== "-" ? getVal("Waktu Assign") : null);
+        let errOptions = `<option value="">-- Pilih Error Code --</option>`; [...new Set(errorCodesCache.map(e => e.errorCode))].filter(Boolean).forEach(err => { let sel = (err === errCode) ? "selected" : ""; errOptions += `<option value="${err}" ${sel}>${err}</option>`; });
+        let subErrOptions = `<option value="">-- Pilih Sub Error Code --</option>`; errorCodesCache.forEach(e => { if(e.errorCode === errCode || !errCode) { let sel = (e.subErrorCode === subErrCode) ? "selected" : ""; subErrOptions += `<option value="${e.subErrorCode}" ${sel}>${e.subErrorCode}</option>`; } });
+        const isAssigned = (leader && leader !== "-" && member && member !== "-"); const btnAssignContainer = document.getElementById('btn-assign-container');
+        if(isAssigned) btnAssignContainer.innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-solid fa-rotate"></i> ReAssign</button>`; else btnAssignContainer.innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-brands fa-telegram"></i> Assign</button>`;
+        let assignStampHtml = assignDate ? `<div class="mt-1.5 text-[10px] text-gray-400 italic"><i class="fa-regular fa-clock"></i> Diproses: ${assignDate}</div>` : "";
+        document.getElementById('seg-assigned').innerHTML = `<div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><span class="block text-[10px] font-bold text-gray-400 uppercase">Leader & Member</span><div id="display-techs-wrapper"><span class="text-xs font-semibold text-gray-800" id="display-techs"><i class="fa-solid fa-user-tie text-blue-600 mr-1"></i> ${leader !== "-" ? leader : "-"} <span class="text-gray-400 mx-1">/</span> <i class="fa-solid fa-users text-gray-600 mr-1"></i> ${member !== "-" ? member : "-"}</span><div id="assign-stamp-container">${assignStampHtml}</div></div></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Errorcode</label><select id="input-errcode" class="input-field pl-3" onchange="onErrorCodeChange()">${errOptions}</select></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Suberrorcode</label><select id="input-suberr" class="input-field pl-3">${subErrOptions}</select></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Engineer Memo (SA)</label><textarea id="input-memo" class="input-field pl-3" rows="2" placeholder="Masukkan engineer memo">${engineerMemo !== "-" ? engineerMemo : ""}</textarea></div>`;
+    }
+
+    function onErrorCodeChange() { const selectedErr = document.getElementById('input-errcode').value; const subErrSelect = document.getElementById('input-suberr'); let subErrOptions = `<option value="">-- Pilih Sub Error Code --</option>`; errorCodesCache.forEach(e => { if(e.errorCode === selectedErr) subErrOptions += `<option value="${e.subErrorCode}">${e.subErrorCode}</option>`; }); subErrSelect.innerHTML = subErrOptions; }
+    function toggleEditMode(section) { if(section === 'order') { isOrderEditMode = !isOrderEditMode; const btn = document.getElementById('btn-edit-order'); if(isOrderEditMode) { btn.innerHTML = `<i class="fa-solid fa-xmark mr-1"></i> Batal Edit`; btn.className = "px-3 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg font-semibold text-[11px] transition"; } else { btn.innerHTML = `<i class="fa-solid fa-pen-to-square mr-1"></i> Update`; btn.className = "px-3 py-1 bg-blue-50 hover:bg-blue-100 text-[#0d55d4] rounded-lg font-semibold text-[11px] transition"; } renderModalContent(); } }
+    function openTechnicianSelector() { const timSelect = document.getElementById('select-tim'); let opts = `<option value="">-- Pilih Tim --</option>`; mappingTimCache.forEach(m => { opts += `<option value="${m.tim}">${m.tim} (${m.leader} & ${m.member})</option>`; }); timSelect.innerHTML = opts; checkTechFormValidity(); document.getElementById('tech-modal').classList.remove('hidden'); }
+    function checkTechFormValidity() { const tim = document.getElementById('select-tim').value; const btnSubmit = document.getElementById('btn-submit-tech'); if(tim) { btnSubmit.disabled = false; btnSubmit.className = "px-4 py-2 bg-[#0d55d4] hover:bg-[#0b47b5] text-white font-semibold rounded-xl text-xs cursor-pointer transition"; } else { btnSubmit.disabled = true; btnSubmit.className = "px-4 py-2 bg-blue-300 text-white font-semibold rounded-xl text-xs cursor-not-allowed transition"; } }
+    function closeTechModal() { document.getElementById('tech-modal').classList.add('hidden'); }
+    function confirmAndAssign() { const timName = document.getElementById('select-tim').value; if(!timName) { showMessage("Pilih Tim terlebih dahulu!", "error"); return; } const selectedTim = mappingTimCache.find(m => m.tim === timName); if(!selectedTim) { showMessage("Data tim tidak ditemukan!", "error"); return; } closeTechModal(); saveOrderDetail('assign', selectedTim); }
+
+    function saveOrderDetail(actionType, timData = null) {
+        const rowData = globalDailyRows[currentEditingRowIndex];
+        function getVal(colName) { let targetClean = colName.toLowerCase(); let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === targetClean); if (idx === -1 && targetClean.includes("order id tsel")) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); return (idx !== -1 && rowData[idx] !== undefined && rowData[idx] !== null) ? String(rowData[idx]).trim() : ""; }
+        let sheetTargetName = 'List Daily Order'; if (currentActiveMode === 'order-kendala') sheetTargetName = 'Order Kendala'; else if (currentActiveMode === 'order-completed') sheetTargetName = 'Order Completed';
+        let oldWo = getVal("Workorder"); let oldTr = getVal("Order ID TSEL"); if (oldTr === "-") oldTr = "";
+        let finalLeader = getVal("LEADER"); let finalMember = getVal("MEMBER"); let finalTimName = ""; let finalTimestamp = null;
+        if (actionType === 'assign' && timData) {
+            finalLeader = timData.leader; finalMember = timData.member; finalTimName = timData.tim;
+            const now = new Date(); const dd = String(now.getDate()).padStart(2, '0'); const mm = String(now.getMonth() + 1).padStart(2, '0'); const yyyy = now.getFullYear(); const hh = String(now.getHours()).padStart(2, '0'); const min = String(now.getMinutes()).padStart(2, '0');
+            finalTimestamp = `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+            let assignStampHtml = `<div class="mt-1.5 text-[10px] text-gray-400 italic"><i class="fa-regular fa-clock"></i> Diproses: ${finalTimestamp}</div>`;
+            document.getElementById('display-techs').innerHTML = `<i class="fa-solid fa-user-tie text-blue-600 mr-1"></i> ${finalLeader} <span class="text-gray-400 mx-1">/</span> <i class="fa-solid fa-users text-gray-600 mr-1"></i> ${finalMember}`;
+            document.getElementById('assign-stamp-container').innerHTML = assignStampHtml;
+            document.getElementById('btn-assign-container').innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-solid fa-rotate"></i> ReAssign</button>`;
+        }
+        let payload = {
+            sheetName: sheetTargetName, action: actionType, oldWorkorder: oldWo, oldTrackId: oldTr,
+            workorder: isOrderEditMode && document.getElementById('edit-wo') ? document.getElementById('edit-wo').value : oldWo, trackId: isOrderEditMode && document.getElementById('edit-track') ? document.getElementById('edit-track').value : oldTr,
+            crmOrderType: isOrderEditMode && document.getElementById('edit-crm') ? document.getElementById('edit-crm').value : getVal("CRM Order Type"), serviceNo: isOrderEditMode && document.getElementById('edit-service') ? document.getElementById('edit-service').value : getVal("Service No."),
+            packageInfo: isOrderEditMode && document.getElementById('edit-pkg') ? document.getElementById('edit-pkg').value : getVal("PACKAGE_INFO"), leader: finalLeader, member: finalMember, timName: finalTimName, assignTime: finalTimestamp,
+            errorCode: document.getElementById('input-errcode') ? document.getElementById('input-errcode').value : getVal("ERRORCODE"), subErrorCode: document.getElementById('input-suberr') ? document.getElementById('input-suberr').value : getVal("SUBERRORCODE"), engineerMemo: document.getElementById('input-memo') ? document.getElementById('input-memo').value : getVal("ENGINEERMEMO (SA)")
+        };
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) {
+            showMessage(res.message, res.success ? 'success' : 'error');
+            if(res.success) { 
+                if(actionType !== 'assign') closeDetailModal(); 
+                modeDataCache['list-daily-order'] = null; modeDataCache['order-kendala'] = null; modeDataCache['order-completed'] = null; 
+                if (currentActiveMode === 'daily-report') loadDashboardData(); else loadActiveOrderData(true); 
+                fetchGlobalUnassignedBadge(); 
+            }
+        }).updateDailyOrderData(payload);
+    }
+
+    function closeDetailModal() { document.getElementById('detail-modal').classList.add('hidden'); }
+
+    function exportExcelActive() {
+        if(!globalDailyHeaders || globalDailyHeaders.length === 0) return;
+        let dataToExport = [globalDailyHeaders, ...globalDailyRows]; let ws = XLSX.utils.aoa_to_sheet(dataToExport); let wb = XLSX.utils.book_new();
+        let exportSheetName = currentActiveMode === 'order-kendala' ? "Order Kendala" : (currentActiveMode === 'order-completed' ? "Order Completed" : (currentActiveMode === 'order-hi' ? "Order Hi" : "List Daily Order"));
+        XLSX.utils.book_append_sheet(wb, ws, exportSheetName); XLSX.writeFile(wb, `${exportSheetName}_Export.xlsx`);
+    }
+
+    function updateFileName(input) { document.getElementById('file-chosen').innerText = input.files[0] ? input.files[0].name : "No file chosen"; }
+    function loadRecentImports() {
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(historyList) {
+            const tbody = document.getElementById('history-table-body');
+            if (!historyList || historyList.length === 0) { tbody.innerHTML = `<tr><td class="py-3 px-3 text-gray-400 italic" colspan="6">Belum ada riwayat impor.</td></tr>`; return; }
+            tbody.innerHTML = ""; historyList.forEach((item, index) => { const tr = document.createElement('tr'); tr.className = "hover:bg-gray-50 transition border-b border-gray-50"; tr.innerHTML = `<td class="py-3 px-3 font-semibold text-gray-700">${index + 1}</td><td class="py-3 px-3 font-medium text-gray-900">${item.file}</td><td class="py-3 px-3"><span class="bg-blue-50 text-blue-700 px-2 py-0.5 rounded font-bold">${item.type}</span></td><td class="py-3 px-3"><span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded">${item.status}</span></td><td class="py-3 px-3 text-gray-600">${item.by}</td><td class="py-3 px-3 text-gray-400">${item.timestamp}</td>`; tbody.appendChild(tr); });
+        }).getRecentImports();
+    }
+    function processUploadExcel() {
+        const fileInput = document.getElementById('excel-file'); const dataType = document.getElementById('import-type').value;
+        if (fileInput.files.length === 0) { showMessage("Pilih file Excel terlebih dahulu!", "error"); return; }
+        const file = fileInput.files[0]; const uploader = localStorage.getItem("sym_pro_user") || "User"; const reader = new FileReader(); document.getElementById('import-loading').classList.remove('hidden');
+        reader.onload = function(e) {
+            try {
+                const data = new Uint8Array(e.target.result); const workbook = XLSX.read(data, { type: 'array' }); const worksheet = workbook.Sheets[workbook.SheetNames[0]]; const rowsArray = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+                if (rowsArray.length <= 1) { document.getElementById('import-loading').classList.add('hidden'); showMessage("File kosong.", "error"); return; }
+                if (typeof google === 'undefined') return;
+                google.script.run.withSuccessHandler(function(res) { document.getElementById('import-loading').classList.add('hidden'); if (res.success) { showMessage(res.message, 'success'); fileInput.value = ''; document.getElementById('file-chosen').innerText = "No file chosen"; loadRecentImports(); fetchGlobalUnassignedBadge(); } else showMessage(res.message, 'error'); }).importExcelData(rowsArray, dataType, uploader, file.name);
+            } catch (err) { document.getElementById('import-loading').classList.add('hidden'); showMessage("Gagal membaca Excel", "error"); }
+        }; reader.readAsArrayBuffer(file);
+    }
+    function logout() { localStorage.removeItem("sym_pro_user"); localStorage.removeItem("sym_pro_role"); document.getElementById('dashboard-wrapper').classList.add('hidden'); document.getElementById('auth-bg').style.display = 'block'; document.getElementById('auth-card-container').style.display = 'flex'; switchView('login'); document.getElementById('login-user').value = ''; document.getElementById('login-pass').value = ''; }
+</script>
