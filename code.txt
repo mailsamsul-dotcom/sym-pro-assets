@@ -2,7 +2,8 @@ const BOT_TOKEN = '8896830235:AAFJPJP_n2_WVmWb1ZpzAue08E_WkCWoGpw';
 const SHEET_ID = '1dmjPYEgJ2-lwr7j9QS9P5-yhEfzwq4w7IKSqsu5O4xI';
 
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('Index')
+  return HtmlService.createTemplateFromFile('Index')
+    .evaluate()
     .setTitle('Sym_Pro Sistem Management')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
