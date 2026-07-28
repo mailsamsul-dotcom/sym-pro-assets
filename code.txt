@@ -718,3 +718,90 @@ function importExcelData(rowsArray, dataType, uploader, fileName) {
     return { success: false, message: "Gagal import: " + e.message };
   }
 }
+
+function saveFollowUpData(payload) {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID); 
+    var targetSheet = ss.getSheetByName("Data Kendala");
+    
+    if (!targetSheet) {
+      targetSheet = ss.insertSheet("Data Kendala");
+      var headers = payload.headers.slice();
+      headers.push("Follow Up Status");
+      headers.push("Tanggal Follow Up");
+      targetSheet.appendRow(headers);
+    }
+
+    // CEK DATA DUPLIKAT DI SHEET DATA KENDALA
+    var data = targetSheet.getDataRange().getValues();
+    var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    var trackIdx = headers.findIndex(function(h) { return h.includes("sc order no") || h.includes("csrm") || h.includes("order id tsel"); });
+    var woIdx = headers.findIndex(function(h) { return h.includes("workorder"); });
+    
+    var isDuplicate = false;
+    var existingRowIndex = -1;
+    
+    if (data.length > 1) {
+        for (var i = 1; i < data.length; i++) {
+            var tVal = trackIdx !== -1 ? String(data[i][trackIdx]).trim() : "";
+            var wVal = woIdx !== -1 ? String(data[i][woIdx]).trim() : "";
+            if ((payload.trackId && tVal === payload.trackId) || (payload.workorder && wVal === payload.workorder)) {
+                isDuplicate = true;
+                existingRowIndex = i + 1; // Baris di spreadsheet (index + 1)
+                break;
+            }
+        }
+    }
+    
+    // Siapkan baris baru
+    var newRow = payload.rowData.slice();
+    while(newRow.length < payload.headers.length) { newRow.push(""); }
+    newRow.push(payload.followUpStatus); 
+    newRow.push(new Date().toLocaleString('id-ID')); 
+
+    // JIKA SUDAH ADA, UPDATE BARISNYA. JIKA BELUM, TAMBAHKAN BARIS BARU.
+    if (isDuplicate) {
+        targetSheet.getRange(existingRowIndex, 1, 1, newRow.length).setValues([newRow]);
+        return { success: true, message: "Data Follow Up diperbarui (mencegah duplikat)." };
+    } else {
+        targetSheet.appendRow(newRow);
+        return { success: true, message: "Data berhasil dicatat ke Data Kendala." };
+    }
+  } catch(e) {
+    return { success: false, message: "Error System: " + e.message };
+  }
+}
+
+function getFollowedUpList() {
+    try {
+        var ss = SpreadsheetApp.openById(SHEET_ID); 
+        var sheet = ss.getSheetByName("Data Kendala");
+        if (!sheet) return { success: true, data: {} };
+        
+        var data = sheet.getDataRange().getValues();
+        if (data.length <= 1) return { success: true, data: {} };
+        
+        var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+        var trackIdx = headers.findIndex(function(h) { return h.includes("sc order no") || h.includes("csrm") || h.includes("order id tsel"); });
+        var woIdx = headers.findIndex(function(h) { return h.includes("workorder"); });
+        var statusIdx = headers.findIndex(function(h) { return h === "follow up status"; });
+        
+        var followedUpMap = {};
+        for (var i = 1; i < data.length; i++) {
+            var tVal = trackIdx !== -1 ? String(data[i][trackIdx]).trim() : "";
+            var wVal = woIdx !== -1 ? String(data[i][woIdx]).trim() : "";
+            var key = tVal || wVal; 
+            var status = statusIdx !== -1 ? String(data[i][statusIdx]).trim() : "Followed Up";
+            if (key) {
+                followedUpMap[key] = status; // Simpan TSEL ID / WO sebagai kunci
+            }
+        }
+        return { success: true, data: followedUpMap };
+    } catch(e) {
+        return { success: false, data: {} };
+    }
+}
+
+function getDataKendala() { 
+  return getSheetDataByName("Data Kendala"); 
+}
