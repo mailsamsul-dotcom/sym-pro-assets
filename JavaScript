@@ -1,7 +1,17 @@
 <script>
     let tempUser = "";
+    // VARIBEL PAGINATION BARU
+    let currentPage = 1;
+    let rowsPerPage = 50;
+    let filteredRowsData = []; 
     let globalDailyHeaders = []; let globalDailyRows = [];
     let currentEditingRowIndex = -1; let isOrderEditMode = false;
+    
+    // VARIBEL STATE UNTUK TOMBOL FOLLOW UP
+    window.followedUpOrders = {}; 
+
+    // VARIBEL STATE UNTUK DATA KENDALA
+    let kendalaHeaders = []; let kendalaRows = [];
     
     let techniciansCache = []; let errorCodesCache = []; let mappingTimCache = [];
     let currentActiveMode = 'daily-order';
@@ -10,12 +20,10 @@
 
     let donutChartInstance = null; let mapInstance = null;
     
-    // Map Geocoding Variables
     let geocodeCache = JSON.parse(localStorage.getItem('sympro_geocode_cache') || '{}');
     let geocodeQueue = [];
     let isGeocoding = false;
 
-    // Global State for Dashboard Modal Filtering
     window.dashFilteredData = { total: {all:[], create:[], migrate:[], modify:[]}, kp: {all:[], create:[], migrate:[], modify:[]}, kt: {all:[], create:[], migrate:[], modify:[]}, op: {all:[], create:[], migrate:[], modify:[]}, comp: {all:[], create:[], migrate:[], modify:[]} };
 
     function getCacheKeyForMode(mode) {
@@ -47,6 +55,14 @@
             applyRoleAccess(savedRole || "user"); switchMenu('daily-report'); loadRecentImports();
         }
         fetchMasterData(); loadMappingTimData(); fetchGlobalUnassignedBadge();
+        
+        document.addEventListener('click', function(event) {
+            const menu = document.getElementById('follow-up-menu');
+            const btn = document.getElementById('btn-follow-up');
+            if (menu && !menu.classList.contains('hidden') && !menu.contains(event.target) && event.target !== btn && (!btn || !btn.contains(event.target))) {
+                menu.classList.add('hidden');
+            }
+        });
     };
 
     /* ======= FUNGSI DASHBOARD DI JS ======= */
@@ -514,22 +530,143 @@
         const activeEl = document.getElementById('menu-' + menuName);
         if(activeEl) { activeEl.classList.remove('text-gray-600', 'font-medium'); activeEl.classList.add('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); }
 
-        ['dashboard', 'daily-report', 'daily-order', 'mapping-tim', 'manage-user', 'update-data'].forEach(view => { const wrapper = document.getElementById('view-wrapper-' + view); if(wrapper) wrapper.classList.add('hidden'); });
+        ['dashboard', 'daily-report', 'daily-order', 'mapping-tim', 'manage-user', 'update-data', 'data-kendala', 'board-kendala'].forEach(view => { 
+            const wrapper = document.getElementById('view-wrapper-' + view); 
+            if(wrapper) wrapper.classList.add('hidden'); 
+        });
 
-        if(menuName === 'daily-report') { 
+        if(menuName === 'dashboard') {
+            document.getElementById('view-wrapper-dashboard').classList.remove('hidden');
+        }
+        else if(menuName === 'daily-report') { 
             currentActiveMode = 'daily-report';
             document.getElementById('view-wrapper-daily-report').classList.remove('hidden'); loadDashboardData(); 
         } 
         else if(menuName === 'update-data') { document.getElementById('view-wrapper-update-data').classList.remove('hidden'); loadRecentImports(); } 
         else if(menuName === 'mapping-tim') { document.getElementById('view-wrapper-mapping-tim').classList.remove('hidden'); } 
         else if(menuName === 'manage-user') { const w = document.getElementById('view-wrapper-manage-user'); if(w) w.classList.remove('hidden'); loadUserManagementData(); } 
+        else if(menuName === 'data-kendala') { 
+            currentActiveMode = 'data-kendala';
+            document.getElementById('view-wrapper-data-kendala').classList.remove('hidden'); 
+            loadDataKendala(); 
+        }
+        else if(menuName === 'board-kendala') { document.getElementById('view-wrapper-board-kendala').classList.remove('hidden'); }
         else if(menuName === 'daily-order' || menuName === 'order-hi' || menuName === 'order-kendala' || menuName === 'order-completed') {
             currentActiveMode = menuName; document.getElementById('view-wrapper-daily-order').classList.remove('hidden');
             let titleHtml = `<i class="fa-solid fa-list-check text-[#0d55d4] mr-2"></i> `;
-            if(menuName === 'daily-order') titleHtml += "List Daily Order"; else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; else if(menuName === 'order-kendala') titleHtml += "Order Kendala"; else if(menuName === 'order-completed') titleHtml += "Order Completed";
+            if(menuName === 'daily-order') titleHtml += "Inbox Assign"; else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; else if(menuName === 'order-kendala') titleHtml += "Inbox Kendala"; else if(menuName === 'order-completed') titleHtml += "List Order Completed";
             document.getElementById('view-title').innerHTML = titleHtml; loadActiveOrderData();
         }
     }
+
+    /* === FUNGSI BARU UNTUK TABEL DATA KENDALA === */
+    function loadDataKendala(forceRefresh = false) {
+        const tbody = document.getElementById('data-kendala-body'); 
+        tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
+        
+        if (typeof google === 'undefined') return;
+        google.script.run.withSuccessHandler(function(res) {
+            if(!res || !res.success) { 
+                tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-red-500 font-semibold">${res ? res.message : 'Respon kosong'}</td></tr>`; 
+                return; 
+            }
+            kendalaHeaders = res.headers || []; 
+            kendalaRows = res.rows || []; 
+            renderTableKendala(kendalaRows);
+        }).withFailureHandler(function(err) { 
+            tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-red-500 font-semibold">Error Server: ${err.message}</td></tr>`; 
+        }).getDataKendala();
+    }
+
+    const KENDALA_COLUMNS = ["Workorder", "Order ID TSEL", "Customer Name", "Follow Up Status", "Tanggal Follow Up", "Assigned To", "Update"];
+
+    function renderTableKendala(rowsToRender) {
+        const thead = document.getElementById('data-kendala-head'); 
+        const tbody = document.getElementById('data-kendala-body');
+        
+        function getColVal(row, colName) {
+            let targetClean = colName.toLowerCase(); 
+            let idx = kendalaHeaders.findIndex(h => String(h).trim().toLowerCase() === targetClean); 
+            if (idx === -1 && targetClean.includes("order id tsel")) idx = kendalaHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); 
+            return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : ""; 
+        }
+
+        let headHtml = `<tr class="bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500 font-bold uppercase tracking-wider">`;
+        KENDALA_COLUMNS.forEach(colName => { 
+            headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky top-0 bg-gray-50">${colName}</th>`; 
+        }); 
+        headHtml += `</tr>`; 
+        thead.innerHTML = headHtml;
+        
+        document.getElementById('kendala-row-count').innerText = `Menampilkan ${rowsToRender.length} data`;
+        
+        if(rowsToRender.length === 0) { 
+            tbody.innerHTML = `<tr><td colspan="${KENDALA_COLUMNS.length}" class="text-center py-6 text-gray-400">Belum ada data kendala.</td></tr>`; 
+            return; 
+        }
+
+        let bodyHtml = "";
+        rowsToRender.forEach((row) => {
+            bodyHtml += `<tr class="table-row-data transition-colors border-b border-gray-50 hover:bg-blue-50">`;
+            KENDALA_COLUMNS.forEach(colName => {
+                let valHtml = "";
+                if (colName === "Assigned To") { 
+                    let lIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'LEADER'); 
+                    let mIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'MEMBER'); 
+                    let leader = lIdx !== -1 ? row[lIdx] : "-";
+                    let member = mIdx !== -1 ? row[mIdx] : "-";
+                    valHtml = `<div class="leading-relaxed"><div class="text-[10px] text-gray-500">L: <span class="font-semibold text-gray-800">${leader}</span></div><div class="text-[10px] text-gray-500">M: <span class="font-semibold text-gray-800">${member}</span></div></div>`; 
+                } 
+                else if (colName === "Update") {
+                    let eIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'ERRORCODE'); 
+                    let subIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'SUBERRORCODE'); 
+                    let memoIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'ENGINEERMEMO (SA)'); 
+                    
+                    let err = eIdx !== -1 ? row[eIdx] : "";
+                    let sub = subIdx !== -1 ? row[subIdx] : "";
+                    let memo = memoIdx !== -1 ? row[memoIdx] : "";
+                    
+                    let errPart = (err || sub) ? `${err}${sub ? ' - ' + sub : ''}` : ""; 
+                    let details = errPart ? `<span class="font-semibold text-gray-800">${errPart}</span>` : "";
+                    if (memo) details += (details ? ` <br> ` : "") + `<span class="italic text-gray-500 text-[10px]">${memo}</span>`;
+                    valHtml = details || "-";
+                } 
+                else if (colName === "Follow Up Status") {
+                    let status = getColVal(row, colName);
+                    let bgClass = status.includes('TSEL') ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700';
+                    valHtml = `<span class="px-2 py-1 ${bgClass} rounded font-bold text-[10px]">${status || "-"}</span>`;
+                }
+                else {
+                    valHtml = getColVal(row, colName);
+                }
+                
+                bodyHtml += `<td class="py-3 px-3 text-gray-600 whitespace-nowrap">${valHtml}</td>`;
+            });
+            bodyHtml += `</tr>`;
+        });
+        tbody.innerHTML = bodyHtml;
+    }
+
+    function filterKendala() {
+        const query = document.getElementById('search-kendala').value.toLowerCase();
+        if(!query) { renderTableKendala(kendalaRows); return; }
+        
+        const filtered = kendalaRows.filter(row => {
+            const rowStr = row.join(" ").toLowerCase();
+            return rowStr.includes(query);
+        });
+        renderTableKendala(filtered);
+    }
+    
+    function exportExcelKendala() {
+        if(!kendalaHeaders || kendalaHeaders.length === 0) return;
+        let dataToExport = [kendalaHeaders, ...kendalaRows]; 
+        let ws = XLSX.utils.aoa_to_sheet(dataToExport); 
+        let wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Data Kendala"); 
+        XLSX.writeFile(wb, `Data_Kendala_Export.xlsx`);
+    }
+    /* ============================================== */
 
     function loadUserManagementData() {
         const tbody = document.getElementById('manage-user-body'); if(!tbody || typeof google === 'undefined') return;
@@ -558,6 +695,13 @@
         if (!forceRefresh && modeDataCache[cacheKey]) { globalDailyHeaders = modeDataCache[cacheKey].headers || []; globalDailyRows = modeDataCache[cacheKey].rows || []; populateMultiSelectFilters(); applyFilters(); return; }
         const tbody = document.getElementById('daily-order-body'); tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
         if (typeof google === 'undefined') return;
+        
+        if (currentActiveMode === 'order-kendala') {
+            google.script.run.withSuccessHandler(function(res) {
+                if (res && res.success) window.followedUpOrders = res.data || {};
+            }).getFollowedUpList();
+        }
+
         const successHandler = function(res) {
             if(!res || !res.success) { tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">${res ? res.message : 'Respon kosong'}</td></tr>`; return; }
             modeDataCache[cacheKey] = { headers: res.headers || [], rows: res.rows || [] }; globalDailyHeaders = modeDataCache[cacheKey].headers; globalDailyRows = modeDataCache[cacheKey].rows; populateMultiSelectFilters(); applyFilters();
@@ -617,27 +761,65 @@
     }
 
     function applyFilters() {
-        if(!globalDailyHeaders || globalDailyHeaders.length === 0) { renderTable([]); return; }
+        if(!globalDailyHeaders || globalDailyHeaders.length === 0) { 
+            filteredRowsData = [];
+            renderTablePaginated(); 
+            return; 
+        }
         const searchQuery = document.getElementById('filter-search').value.toLowerCase().trim();
-        const selectedCrms = Array.from(document.querySelectorAll('.cb-crm:checked')).map(cb => cb.value); const selectedJenis = Array.from(document.querySelectorAll('.cb-jenis:checked')).map(cb => cb.value); const selectedErrors = Array.from(document.querySelectorAll('.cb-errorcode:checked')).map(cb => cb.value); const selectedSubErrors = Array.from(document.querySelectorAll('.cb-suberrorcode:checked')).map(cb => cb.value);
+        const selectedCrms = Array.from(document.querySelectorAll('.cb-crm:checked')).map(cb => cb.value); 
+        const selectedJenis = Array.from(document.querySelectorAll('.cb-jenis:checked')).map(cb => cb.value); 
+        const selectedErrors = Array.from(document.querySelectorAll('.cb-errorcode:checked')).map(cb => cb.value); 
+        const selectedSubErrors = Array.from(document.querySelectorAll('.cb-suberrorcode:checked')).map(cb => cb.value);
+        
         let workorderIdx = -1, trackIdIdx = -1, crmTypeIdx = -1, jenisErrorIdx = -1, errorcodeIdx = -1, suberrorcodeIdx = -1, leaderIdx = -1, memberIdx = -1;
-        globalDailyHeaders.forEach((h, idx) => { let hClean = String(h).trim().toLowerCase(); if(hClean.includes('workorder')) workorderIdx = idx; if(hClean === 'order id tsel') trackIdIdx = idx; else if(trackIdIdx === -1 && (hClean.includes('sc order no') || hClean.includes('csrm'))) trackIdIdx = idx; if(hClean === 'crm order type') crmTypeIdx = idx; if(hClean === 'jenis_error') jenisErrorIdx = idx; if(hClean === 'errorcode') errorcodeIdx = idx; if(hClean === 'suberrorcode') suberrorcodeIdx = idx; if(hClean === 'leader') leaderIdx = idx; if(hClean === 'member') memberIdx = idx; });
+        
+        globalDailyHeaders.forEach((h, idx) => { 
+            let hClean = String(h).trim().toLowerCase(); 
+            if(hClean.includes('workorder')) workorderIdx = idx; 
+            if(hClean === 'order id tsel') trackIdIdx = idx; 
+            else if(trackIdIdx === -1 && (hClean.includes('sc order no') || hClean.includes('csrm'))) trackIdIdx = idx; 
+            if(hClean === 'crm order type') crmTypeIdx = idx; 
+            if(hClean === 'jenis_error') jenisErrorIdx = idx; 
+            if(hClean === 'errorcode') errorcodeIdx = idx; 
+            if(hClean === 'suberrorcode') suberrorcodeIdx = idx; 
+            if(hClean === 'leader') leaderIdx = idx; 
+            if(hClean === 'member') memberIdx = idx; 
+        });
 
         let filtered = globalDailyRows.filter(row => {
             if (currentActiveMode === 'daily-order' || currentActiveMode === 'order-hi') {
-                let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : ""; let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : ""; let isAssigned = (leader !== "" && leader !== "-") && (member !== "" && member !== "-");
-                if (currentActiveMode === 'daily-order' && isAssigned) return false; if (currentActiveMode === 'order-hi' && !isAssigned) return false;
+                let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : ""; 
+                let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : ""; 
+                let isAssigned = (leader !== "" && leader !== "-") && (member !== "" && member !== "-");
+                if (currentActiveMode === 'daily-order' && isAssigned) return false; 
+                if (currentActiveMode === 'order-hi' && !isAssigned) return false;
             }
             let matchSearch = true;
-            if(searchQuery !== "") { let woVal = workorderIdx !== -1 ? String(row[workorderIdx] || "").toLowerCase() : ""; let trVal = trackIdIdx !== -1 ? String(row[trackIdIdx] || "").toLowerCase() : ""; matchSearch = woVal.includes(searchQuery) || trVal.includes(searchQuery); }
+            if(searchQuery !== "") { 
+                let woVal = workorderIdx !== -1 ? String(row[workorderIdx] || "").toLowerCase() : ""; 
+                let trVal = trackIdIdx !== -1 ? String(row[trackIdIdx] || "").toLowerCase() : ""; 
+                matchSearch = woVal.includes(searchQuery) || trVal.includes(searchQuery); 
+            }
             let matchCrm = true; if(selectedCrms.length > 0 && crmTypeIdx !== -1) matchCrm = selectedCrms.includes(String(row[crmTypeIdx] || "").trim());
             let matchJenis = true; if(selectedJenis.length > 0 && jenisErrorIdx !== -1) matchJenis = selectedJenis.includes(String(row[jenisErrorIdx] || "").trim());
             let matchErrorcode = true; if(selectedErrors.length > 0 && errorcodeIdx !== -1) matchErrorcode = selectedErrors.includes(String(row[errorcodeIdx] || "").trim());
             let matchSubError = true; if(selectedSubErrors.length > 0 && suberrorcodeIdx !== -1) matchSubError = selectedSubErrors.includes(String(row[suberrorcodeIdx] || "").trim());
             return matchSearch && matchCrm && matchJenis && matchErrorcode && matchSubError;
         });
-        if (currentSortCol) { filtered.sort((a, b) => { let valA = getCellValByColName(a, currentSortCol); let valB = getCellValByColName(b, currentSortCol); let res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }); return currentSortDir === 'asc' ? res : -res; }); }
-        renderTable(filtered);
+        
+        if (currentSortCol) { 
+            filtered.sort((a, b) => { 
+                let valA = getCellValByColName(a, currentSortCol); 
+                let valB = getCellValByColName(b, currentSortCol); 
+                let res = String(valA).localeCompare(String(valB), undefined, { numeric: true, sensitivity: 'base' }); 
+                return currentSortDir === 'asc' ? res : -res; 
+            }); 
+        }
+        
+        filteredRowsData = filtered;
+        currentPage = 1;
+        renderTablePaginated();
     }
 
     function getCellValByColName(row, colName) {
@@ -651,42 +833,134 @@
 
     function resetFilters() { document.getElementById('filter-search').value = ""; document.querySelectorAll('.multiselect-dropdown input[type="checkbox"]').forEach(cb => cb.checked = false); updateDropdownLabel('crm'); updateDropdownLabel('jenis'); updateDropdownLabel('errorcode'); updateDropdownLabel('suberrorcode'); currentSortCol = null; currentSortDir = 'asc'; applyFilters(); showMessage("Filter dan urutan berhasil direset.", "success"); }
 
-    function renderTable(rowsToRender) {
-        const thead = document.getElementById('daily-order-head'); const tbody = document.getElementById('daily-order-body');
-        function getColVal(row, colName) {
-            if (colName === "Order ID TSEL") { let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === "order id tsel"); if (idx === -1) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : ""; }
-            let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === colName.toLowerCase()); return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : "";
+    function changePage(direction) {
+        const totalPages = Math.ceil(filteredRowsData.length / rowsPerPage);
+        if (direction === 'prev' && currentPage > 1) {
+            currentPage--;
+            renderTablePaginated();
+        } else if (direction === 'next' && currentPage < totalPages) {
+            currentPage++;
+            renderTablePaginated();
         }
+    }
+
+    function renderTablePaginated() {
+        const thead = document.getElementById('daily-order-head'); 
+        const tbody = document.getElementById('daily-order-body');
+        
+        function getColVal(row, colName) {
+            if (colName === "Order ID TSEL") { 
+                let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === "order id tsel"); 
+                if (idx === -1) idx = globalDailyHeaders.findIndex(h => { 
+                    let hc = String(h).trim().toLowerCase(); 
+                    return hc.includes("sc order no") || hc.includes("csrm"); 
+                }); 
+                return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : ""; 
+            }
+            let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === colName.toLowerCase()); 
+            return (idx !== -1 && row[idx] !== undefined && row[idx] !== null) ? row[idx] : "";
+        }
+
         let headHtml = `<tr class="text-[11px] uppercase tracking-wider"><th class="py-3 px-3 text-center sticky-head-aksi">Aksi</th>`;
-        TARGET_COLUMNS.forEach(colName => { let sortIcon = `<i class="fa-solid fa-sort text-blue-200 text-[10px] ml-1"></i>`; if (currentSortCol === colName) sortIcon = currentSortDir === 'asc' ? `<i class="fa-solid fa-sort-up text-amber-300 text-[11px] ml-1"></i>` : `<i class="fa-solid fa-sort-down text-amber-300 text-[11px] ml-1"></i>`; let headerBtn = `<button onclick="sortByColumn('${colName}')" class="flex items-center gap-1 hover:text-amber-200 transition focus:outline-none uppercase font-bold">${colName} ${sortIcon}</button>`; if (colName === "Workorder") headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-wo">${headerBtn}</th>`; else headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-other">${headerBtn}</th>`; }); 
-        headHtml += `</tr>`; thead.innerHTML = headHtml;
+        TARGET_COLUMNS.forEach(colName => { 
+            let sortIcon = `<i class="fa-solid fa-sort text-blue-200 text-[10px] ml-1"></i>`; 
+            if (currentSortCol === colName) sortIcon = currentSortDir === 'asc' ? `<i class="fa-solid fa-sort-up text-amber-300 text-[11px] ml-1"></i>` : `<i class="fa-solid fa-sort-down text-amber-300 text-[11px] ml-1"></i>`; 
+            let headerBtn = `<button onclick="sortByColumn('${colName}')" class="flex items-center gap-1 hover:text-amber-200 transition focus:outline-none uppercase font-bold">${colName} ${sortIcon}</button>`; 
+            if (colName === "Workorder") headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-wo">${headerBtn}</th>`; 
+            else headHtml += `<th class="py-3 px-3 whitespace-nowrap sticky-head-other">${headerBtn}</th>`; 
+        }); 
+        headHtml += `</tr>`; 
+        thead.innerHTML = headHtml;
         
-        let validRows = rowsToRender.filter(row => { let wo = String(getColVal(row, "Workorder")).trim(); let track = String(getColVal(row, "Order ID TSEL")).trim(); let cust = String(getColVal(row, "Customer Name")).trim(); return (wo !== "" && !wo.toUpperCase().includes("WORKORDER")) || (track !== "" && !track.toUpperCase().includes("SC ORDER NO") && !track.toUpperCase().includes("ORDER ID TSEL")) || (cust !== "" && !cust.toUpperCase().includes("CUSTOMER NAME")); });
+        let validRows = filteredRowsData.filter(row => { 
+            let wo = String(getColVal(row, "Workorder")).trim(); 
+            let track = String(getColVal(row, "Order ID TSEL")).trim(); 
+            let cust = String(getColVal(row, "Customer Name")).trim(); 
+            return (wo !== "" && !wo.toUpperCase().includes("WORKORDER")) || (track !== "" && !track.toUpperCase().includes("SC ORDER NO") && !track.toUpperCase().includes("ORDER ID TSEL")) || (cust !== "" && !cust.toUpperCase().includes("CUSTOMER NAME")); 
+        });
         
-        document.getElementById('table-row-count').innerText = `Menampilkan ${validRows.length} data`;
-        if(validRows.length === 0) { tbody.innerHTML = `<tr><td colspan="${TARGET_COLUMNS.length + 1}" class="text-center py-6 text-gray-400">Tidak ada data yang cocok dengan filter.</td></tr>`; return; }
+        const totalData = validRows.length;
+        const totalPages = Math.ceil(totalData / rowsPerPage);
+        
+        const startIndex = (currentPage - 1) * rowsPerPage;
+        const endIndex = Math.min(startIndex + rowsPerPage, totalData);
+        
+        const paginatedRows = validRows.slice(startIndex, endIndex);
+
+        document.getElementById('table-row-count').innerText = totalData === 0 ? "Menampilkan 0 data" : `Menampilkan ${startIndex + 1} - ${endIndex} dari ${totalData} data`;
+        
+        const btnPrev = document.getElementById('btn-prev-page');
+        const btnNext = document.getElementById('btn-next-page');
+        const pageIndicator = document.getElementById('page-indicator');
+        
+        if(btnPrev && btnNext && pageIndicator) {
+            btnPrev.disabled = currentPage === 1;
+            btnNext.disabled = currentPage === totalPages || totalPages === 0;
+            
+            btnPrev.className = btnPrev.disabled ? "px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed" : "px-3 py-1.5 bg-blue-50 text-[#0d55d4] hover:bg-blue-100 rounded-lg text-[11px] font-bold transition cursor-pointer";
+            btnNext.className = btnNext.disabled ? "px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed" : "px-3 py-1.5 bg-blue-50 text-[#0d55d4] hover:bg-blue-100 rounded-lg text-[11px] font-bold transition cursor-pointer";
+            
+            pageIndicator.innerText = `Hal ${totalPages === 0 ? 0 : currentPage} dari ${totalPages}`;
+        }
+
+        if(paginatedRows.length === 0) { 
+            tbody.innerHTML = `<tr><td colspan="${TARGET_COLUMNS.length + 1}" class="text-center py-6 text-gray-400">Tidak ada data yang cocok dengan filter.</td></tr>`; 
+            return; 
+        }
 
         let bodyHtml = "";
-        validRows.forEach((row) => {
-            let originalIndex = globalDailyRows.indexOf(row);
-            bodyHtml += `<tr class="table-row-data transition-colors border-b border-gray-100"><td class="py-2.5 px-3 text-center sticky-aksi"><button onclick="openDetailModal(${originalIndex})" class="px-2.5 py-1 bg-blue-100 hover:bg-blue-200 text-[#0d55d4] rounded-lg font-medium text-[11px] transition cursor-pointer"><i class="fa-solid fa-eye mr-1"></i> Detail</button></td>`;
+        paginatedRows.forEach((row) => {
+            let originalIndex = globalDailyRows.indexOf(row); 
+            let actionBtnHtml = "";
+            
+            let trackIdVal = String(getColVal(row, "Order ID TSEL")).trim();
+            let woVal = String(getColVal(row, "Workorder")).trim();
+            let rowKey = trackIdVal || woVal;
+            
+            if (currentActiveMode === 'order-kendala' && window.followedUpOrders && window.followedUpOrders[rowKey]) {
+                let status = window.followedUpOrders[rowKey];
+                let bgClass = status.includes('TSEL') ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700';
+                actionBtnHtml = `<div class="px-2 py-2 ${bgClass} rounded-lg font-bold text-[9px] text-center shadow-xs leading-tight w-full cursor-not-allowed whitespace-normal mx-auto max-w-[80px]">${status}</div>`;
+            } else {
+                actionBtnHtml = `<button onclick="openDetailModal(${originalIndex})" class="px-2.5 py-1.5 bg-blue-100 hover:bg-blue-200 text-[#0d55d4] rounded-lg font-medium text-[11px] transition cursor-pointer w-full shadow-xs"><i class="fa-solid fa-eye mr-1"></i> Detail</button>`;
+            }
+
+            bodyHtml += `<tr class="table-row-data transition-colors border-b border-gray-100"><td class="py-2.5 px-3 text-center sticky-aksi">${actionBtnHtml}</td>`;
+            
             TARGET_COLUMNS.forEach(colName => {
                 let valHtml = "";
-                if (colName === "Assigned To") { let leader = getColVal(row, "LEADER"); let member = getColVal(row, "MEMBER"); valHtml = `<div class="leading-relaxed"><div>👷🏻 Leader : <span class="font-semibold text-gray-800">${leader || "-"}</span></div><div>👷🏻 Member : <span class="font-semibold text-gray-800">${member || "-"}</span></div></div>`; } 
-                else if (colName === "CRM Order Type") { let upperCrm = String(getColVal(row, colName)).trim().toUpperCase(); if (upperCrm === "CREATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #46bdc6;">CREATE</span>`; else if (upperCrm === "MIGRATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #ff6d01;">MIGRATE</span>`; else if (upperCrm === "MODIFY") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #fbbc04; color: #1e293b;">MODIFY</span>`; else valHtml = upperCrm || "-"; } 
+                if (colName === "Assigned To") { 
+                    let leader = getColVal(row, "LEADER"); 
+                    let member = getColVal(row, "MEMBER"); 
+                    valHtml = `<div class="leading-relaxed"><div>👷🏻 Leader : <span class="font-semibold text-gray-800">${leader || "-"}</span></div><div>👷🏻 Member : <span class="font-semibold text-gray-800">${member || "-"}</span></div></div>`; 
+                } 
+                else if (colName === "CRM Order Type") { 
+                    let upperCrm = String(getColVal(row, colName)).trim().toUpperCase(); 
+                    if (upperCrm === "CREATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #46bdc6;">CREATE</span>`; 
+                    else if (upperCrm === "MIGRATE") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #ff6d01;">MIGRATE</span>`; 
+                    else if (upperCrm === "MODIFY") valHtml = `<span class="px-2.5 py-1 rounded-lg text-white font-bold text-[10px] inline-block shadow-xs" style="background-color: #fbbc04; color: #1e293b;">MODIFY</span>`; 
+                    else valHtml = upperCrm || "-"; 
+                } 
                 else if (colName === "Update") {
-                    let err = getColVal(row, "ERRORCODE"); let subErr = getColVal(row, "SUBERRORCODE"); let memo = getColVal(row, "ENGINEERMEMO (SA)"); let jenisErr = getColVal(row, "JENIS_ERROR") || getColVal(row, "STATUS") || "";
+                    let err = getColVal(row, "ERRORCODE"); 
+                    let subErr = getColVal(row, "SUBERRORCODE"); 
+                    let memo = getColVal(row, "ENGINEERMEMO (SA)"); 
+                    let jenisErr = getColVal(row, "JENIS_ERROR") || getColVal(row, "STATUS") || "";
+                    
                     let comboText = `${err} ${subErr} ${memo} ${jenisErr}`.toUpperCase(); let badgeHtml = "";
                     if (comboText.includes("KENDALA PELANGGAN")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #ffedd5; color: #c2410c;">KENDALA PELANGGAN</span>`;
                     else if (comboText.includes("KENDALA TEKNIK")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #fee2e2; color: #dc2626;">KENDALA TEKNIK / JARINGAN</span>`;
                     else if (comboText.includes("AKTIVASI")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold" style="background-color: #dcfce7; color: #15803d;">AKTIVASI</span>`;
                     else if (comboText.includes("COMPLETED") || comboText.includes("PS")) badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold text-white shadow-xs" style="background-color: #34a853;">COMPLETED (PS)</span>`;
-                    let errPart = (err || subErr) ? `${err}${subErr ? ' - ' + subErr : ''}` : ""; let details = errPart ? `<span class="font-semibold text-gray-800">${errPart}</span>` : "";
+                    
+                    let errPart = (err || subErr) ? `${err}${subErr ? ' - ' + subErr : ''}` : ""; 
+                    let details = errPart ? `<span class="font-semibold text-gray-800">${errPart}</span>` : "";
                     if (memo) details += (details ? ` <span class="text-gray-300">|</span> ` : "") + `<span class="italic text-gray-500">${memo}</span>`;
                     valHtml = badgeHtml ? `<div class="flex items-center gap-1.5 flex-wrap">${badgeHtml} ${details}</div>` : (details || "-");
                 } else valHtml = getColVal(row, colName);
                 
-                if (colName === "Workorder") bodyHtml += `<td class="py-2.5 px-3 text-gray-800 font-bold whitespace-nowrap sticky-wo">${valHtml}</td>`; else bodyHtml += `<td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">${valHtml}</td>`;
+                if (colName === "Workorder") bodyHtml += `<td class="py-2.5 px-3 text-gray-800 font-bold whitespace-nowrap sticky-wo">${valHtml}</td>`; 
+                else bodyHtml += `<td class="py-2.5 px-3 text-gray-600 whitespace-nowrap">${valHtml}</td>`;
             });
             bodyHtml += `</tr>`;
         });
@@ -710,10 +984,92 @@
         let leader = getVal("LEADER"); let member = getVal("MEMBER"); let errCode = getVal("ERRORCODE"); let subErrCode = getVal("SUBERRORCODE"); let engineerMemo = getVal("ENGINEERMEMO (SA)"); let assignDate = getVal("Assign Date") !== "-" ? getVal("Assign Date") : (getVal("Waktu Assign") !== "-" ? getVal("Waktu Assign") : null);
         let errOptions = `<option value="">-- Pilih Error Code --</option>`; [...new Set(errorCodesCache.map(e => e.errorCode))].filter(Boolean).forEach(err => { let sel = (err === errCode) ? "selected" : ""; errOptions += `<option value="${err}" ${sel}>${err}</option>`; });
         let subErrOptions = `<option value="">-- Pilih Sub Error Code --</option>`; errorCodesCache.forEach(e => { if(e.errorCode === errCode || !errCode) { let sel = (e.subErrorCode === subErrCode) ? "selected" : ""; subErrOptions += `<option value="${e.subErrorCode}" ${sel}>${e.subErrorCode}</option>`; } });
-        const isAssigned = (leader && leader !== "-" && member && member !== "-"); const btnAssignContainer = document.getElementById('btn-assign-container');
-        if(isAssigned) btnAssignContainer.innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-solid fa-rotate"></i> ReAssign</button>`; else btnAssignContainer.innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-brands fa-telegram"></i> Assign</button>`;
         let assignStampHtml = assignDate ? `<div class="mt-1.5 text-[10px] text-gray-400 italic"><i class="fa-regular fa-clock"></i> Diproses: ${assignDate}</div>` : "";
         document.getElementById('seg-assigned').innerHTML = `<div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><span class="block text-[10px] font-bold text-gray-400 uppercase">Leader & Member</span><div id="display-techs-wrapper"><span class="text-xs font-semibold text-gray-800" id="display-techs"><i class="fa-solid fa-user-tie text-blue-600 mr-1"></i> ${leader !== "-" ? leader : "-"} <span class="text-gray-400 mx-1">/</span> <i class="fa-solid fa-users text-gray-600 mr-1"></i> ${member !== "-" ? member : "-"}</span><div id="assign-stamp-container">${assignStampHtml}</div></div></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Errorcode</label><select id="input-errcode" class="input-field pl-3" onchange="onErrorCodeChange()">${errOptions}</select></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Suberrorcode</label><select id="input-suberr" class="input-field pl-3">${subErrOptions}</select></div><div class="bg-gray-50 p-2.5 rounded-xl border border-gray-100 sm:col-span-2"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Engineer Memo (SA)</label><textarea id="input-memo" class="input-field pl-3" rows="2" placeholder="Masukkan engineer memo">${engineerMemo !== "-" ? engineerMemo : ""}</textarea></div>`;
+        
+        const btnAssignContainer = document.getElementById('btn-assign-container');
+        if (currentActiveMode === 'order-kendala') {
+            btnAssignContainer.innerHTML = `
+                <div class="relative">
+                    <button id="btn-follow-up" onclick="toggleFollowUpMenu()" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer">
+                        <i class="fa-solid fa-share-square"></i> Follow Up
+                    </button>
+                    <div id="follow-up-menu" class="hidden absolute bottom-full right-0 mb-2 w-48 bg-white rounded-lg shadow-xl border border-gray-100 py-1 z-50">
+                        <button onclick="handleFollowUpTsel()" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 font-medium transition">1. Follow Up to TSEL</button>
+                        <button onclick="handleFollowUpRevoke()" class="w-full text-left px-4 py-2 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 font-medium transition border-t border-gray-50">2. Follow Up Revoke / UNSC</button>
+                    </div>
+                </div>
+            `;
+        } else {
+             const isAssigned = (leader && leader !== "-" && member && member !== "-");
+             if(isAssigned) btnAssignContainer.innerHTML = `<button onclick="saveOrderDetail('save')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5"><i class="fa-solid fa-floppy-disk"></i> Save</button><button onclick="openTechnicianSelector()" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-solid fa-rotate"></i> ReAssign</button>`; else btnAssignContainer.innerHTML = `<button onclick="saveOrderDetail('save')" class="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5"><i class="fa-solid fa-floppy-disk"></i> Save</button><button onclick="openTechnicianSelector()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-brands fa-telegram"></i> Assign</button>`;
+        }
+    }
+    
+    function toggleFollowUpMenu() {
+        document.getElementById('follow-up-menu').classList.toggle('hidden');
+    }
+
+    function handleFollowUpTsel() {
+        processFollowUpAction('Follow Up to TSEL');
+    }
+
+    function handleFollowUpRevoke() {
+        processFollowUpAction('Follow Up Revoke / UNSC');
+    }
+
+    // FUNGSI BARU UNTUK PROSES KE BACKEND
+    function processFollowUpAction(statusText) {
+        document.getElementById('follow-up-menu').classList.add('hidden');
+        
+        const btn = document.getElementById('btn-follow-up');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Memproses...';
+        btn.disabled = true;
+
+        const rowData = globalDailyRows[currentEditingRowIndex];
+        
+        function getVal(colName) { 
+            let targetClean = colName.toLowerCase(); 
+            let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === targetClean); 
+            if (idx === -1 && targetClean.includes("order id tsel")) idx = globalDailyHeaders.findIndex(h => { let hc = String(h).trim().toLowerCase(); return hc.includes("sc order no") || hc.includes("csrm"); }); 
+            return (idx !== -1 && rowData[idx] !== undefined && rowData[idx] !== null) ? String(rowData[idx]).trim() : ""; 
+        }
+
+        const trackIdVal = getVal("Order ID TSEL");
+        const woVal = getVal("Workorder");
+        const rowKey = trackIdVal || woVal; // Gunakan ID sebagai Key
+
+        const payload = {
+            sheetName: currentActiveMode === 'order-kendala' ? 'Order Kendala' : 'List Daily Order',
+            workorder: woVal,
+            trackId: trackIdVal,
+            followUpStatus: statusText,
+            rowData: rowData,
+            headers: globalDailyHeaders
+        };
+
+        if (typeof google === 'undefined') return;
+        
+        google.script.run.withSuccessHandler(function(res) {
+            if(res.success) {
+                showMessage("Berhasil: " + statusText, "success");
+                closeDetailModal();
+                
+                // Simpan state ke ID Unik
+                window.followedUpOrders[rowKey] = statusText;
+                
+                // Render ulang tabel
+                renderTablePaginated(); 
+
+                if (statusText === 'Follow Up Revoke / UNSC') {
+                    switchMenu('data-kendala');
+                }
+            } else {
+                showMessage(res.message, "error");
+                btn.innerHTML = '<i class="fa-solid fa-share-square"></i> Follow Up';
+                btn.disabled = false;
+            }
+        }).saveFollowUpData(payload);
     }
 
     function onErrorCodeChange() { const selectedErr = document.getElementById('input-errcode').value; const subErrSelect = document.getElementById('input-suberr'); let subErrOptions = `<option value="">-- Pilih Sub Error Code --</option>`; errorCodesCache.forEach(e => { if(e.errorCode === selectedErr) subErrOptions += `<option value="${e.subErrorCode}">${e.subErrorCode}</option>`; }); subErrSelect.innerHTML = subErrOptions; }
