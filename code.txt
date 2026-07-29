@@ -1,6 +1,9 @@
 const BOT_TOKEN = '8896830235:AAFJPJP_n2_WVmWb1ZpzAue08E_WkCWoGpw';
 const SHEET_ID = '1dmjPYEgJ2-lwr7j9QS9P5-yhEfzwq4w7IKSqsu5O4xI';
 
+// === KONFIGURASI SPREADSHEET KPI BARU ===
+const SHEET_ID_KPI = '1VxTAI5afG6lV4R6BUB_y9Sf4tqRzoWXIyz6OXSpNg0U';
+
 function doGet() {
   return HtmlService.createTemplateFromFile('Index')
     .evaluate()
@@ -8,6 +11,31 @@ function doGet() {
     .addMetaTag('viewport', 'width=device-width, initial-scale=1');
 }
 
+// === FUNGSI TARIK DATA SPREADSHEET KPI ===
+function getKpiDataByName(sheetName) {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID_KPI).getSheetByName(sheetName);
+    if (!sheet) return { success: false, message: "Sheet '" + sheetName + "' tidak ditemukan di Spreadsheet KPI." };
+    
+    const data = sheet.getDataRange().getValues();
+    if (!data || data.length <= 1) {
+      const headers = (data && data.length > 0) ? data[0] : [];
+      return { success: true, headers: headers, rows: [] };
+    }
+    
+    const headers = data[0];
+    const rows = data.slice(1);
+    
+    return { success: true, headers: headers, rows: rows };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function getKpiAssB2CData() { return getKpiDataByName("Close Tiket"); }
+function getResultSqmData() { return getKpiDataByName("Close SQM"); }
+
+// === FUNGSI SISTEM UTAMA ===
 function sendTelegramOTP(chatId, otp) {
   try {
     if (!chatId || chatId === "" || chatId === "undefined") {
@@ -551,8 +579,8 @@ function syncNewOrdersFromUpdateData() {
         for (var s = 0; s < sourceHeaders.length; s++) {
           var sClean = String(sourceHeaders[s]).trim().toLowerCase();
           if (sClean === hClean || 
-             ((hClean.includes("order id tsel") || hClean.includes("sc order no")) && 
-              (sClean.includes("order id tsel") || sClean.includes("sc order no") || sClean.includes("csrm")))) {
+              ((hClean.includes("order id tsel") || hClean.includes("sc order no")) && 
+               (sClean.includes("order id tsel") || sClean.includes("sc order no") || sClean.includes("csrm")))) {
             foundIdx = s;
             break;
           }
@@ -732,7 +760,6 @@ function saveFollowUpData(payload) {
       targetSheet.appendRow(headers);
     }
 
-    // CEK DATA DUPLIKAT DI SHEET DATA KENDALA
     var data = targetSheet.getDataRange().getValues();
     var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
     var trackIdx = headers.findIndex(function(h) { return h.includes("sc order no") || h.includes("csrm") || h.includes("order id tsel"); });
@@ -747,19 +774,17 @@ function saveFollowUpData(payload) {
             var wVal = woIdx !== -1 ? String(data[i][woIdx]).trim() : "";
             if ((payload.trackId && tVal === payload.trackId) || (payload.workorder && wVal === payload.workorder)) {
                 isDuplicate = true;
-                existingRowIndex = i + 1; // Baris di spreadsheet (index + 1)
+                existingRowIndex = i + 1; 
                 break;
             }
         }
     }
     
-    // Siapkan baris baru
     var newRow = payload.rowData.slice();
     while(newRow.length < payload.headers.length) { newRow.push(""); }
     newRow.push(payload.followUpStatus); 
     newRow.push(new Date().toLocaleString('id-ID')); 
 
-    // JIKA SUDAH ADA, UPDATE BARISNYA. JIKA BELUM, TAMBAHKAN BARIS BARU.
     if (isDuplicate) {
         targetSheet.getRange(existingRowIndex, 1, 1, newRow.length).setValues([newRow]);
         return { success: true, message: "Data Follow Up diperbarui (mencegah duplikat)." };
@@ -793,7 +818,7 @@ function getFollowedUpList() {
             var key = tVal || wVal; 
             var status = statusIdx !== -1 ? String(data[i][statusIdx]).trim() : "Followed Up";
             if (key) {
-                followedUpMap[key] = status; // Simpan TSEL ID / WO sebagai kunci
+                followedUpMap[key] = status;
             }
         }
         return { success: true, data: followedUpMap };
@@ -804,4 +829,163 @@ function getFollowedUpList() {
 
 function getDataKendala() { 
   return getSheetDataByName("Data Kendala"); 
+}
+
+function getToDoList() {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName("To Do List");
+    
+    if (!sheet) {
+      sheet = ss.insertSheet("To Do List");
+      sheet.appendRow(["Task ID", "Type", "Title", "Assignee", "Status", "Priority", "Time", "Created By", "Timestamp"]);
+      return { success: true, data: [] };
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    var tasks = [];
+    
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0]) {
+        var rawTime = data[i][6];
+        var timeStr = "";
+        if (rawTime instanceof Date) {
+            var h = String(rawTime.getHours()).padStart(2, '0');
+            var m = String(rawTime.getMinutes()).padStart(2, '0');
+            timeStr = h + ":" + m;
+        } else {
+            timeStr = String(rawTime || "");
+        }
+
+        tasks.push({
+          id: String(data[i][0] || ""),
+          type: String(data[i][1] || ""),
+          title: String(data[i][2] || ""),
+          assignee: String(data[i][3] || ""),
+          status: String(data[i][4] || ""),
+          priority: String(data[i][5] || ""),
+          time: timeStr,
+          originalIndex: i + 1
+        });
+      }
+    }
+    return { success: true, data: tasks };
+  } catch(e) {
+    return { success: false, message: e.message, data: [] };
+  }
+}
+
+function saveOrUpdateToDo(payload) {
+  try {
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName("To Do List");
+    if (!sheet) sheet = ss.insertSheet("To Do List");
+    
+    var now = new Date().toLocaleString('id-ID');
+    
+    if (payload.action === 'new') {
+      var newId = "TSK-" + new Date().getTime();
+      sheet.appendRow([
+        newId, payload.type, payload.title, payload.assignee, 
+        payload.status, payload.priority, payload.time, payload.user, now
+      ]);
+      SpreadsheetApp.flush();
+      return { success: true, message: "Task baru berhasil ditambahkan!", newId: newId };
+    } 
+    else if (payload.action === 'edit' || payload.action === 'toggle') {
+      var row = payload.originalIndex;
+      if (payload.action === 'toggle') {
+        sheet.getRange(row, 5).setValue(payload.status);
+        SpreadsheetApp.flush();
+        return { success: true, message: "Status task diperbarui." };
+      }
+      sheet.getRange(row, 2).setValue(payload.type);
+      sheet.getRange(row, 3).setValue(payload.title);
+      sheet.getRange(row, 4).setValue(payload.assignee);
+      sheet.getRange(row, 5).setValue(payload.status);
+      sheet.getRange(row, 6).setValue(payload.priority);
+      sheet.getRange(row, 7).setValue(payload.time);
+      SpreadsheetApp.flush();
+      return { success: true, message: "Task berhasil di-update!" };
+    }
+  } catch(e) {
+    return { success: false, message: "Gagal menyimpan task: " + e.message };
+  }
+}
+
+// =========================================================================
+// FUNGSI TARIK ANGKA REKAP DARI SHEET "Close Tiket"
+// =========================================================================
+function getKpiAssB2CSummary() {
+  try {
+    const sheet = SpreadsheetApp.openById(SHEET_ID_KPI).getSheetByName("Dashboard_Cons");
+    if (!sheet) {
+      return { success: false, message: "Sheet 'Dashboard_Cons' tidak ditemukan di Spreadsheet KPI." };
+    }
+    
+    // Nilai-nilai sel di bawah ini disesuaikan dengan rumus yang sudah Anda buat di spreadsheet
+    return {
+      success: true,
+      data: {
+        totalList: sheet.getRange("J6").getValue(), // Total List Tiket (18.122)
+        
+        sa: {
+          open: sheet.getRange("W6").getValue(),    // Total Tiket Open TEKNIS
+          diaFsk: sheet.getRange("X9").getValue(),  diaLgc: sheet.getRange("Y9").getValue(),
+          platFsk: sheet.getRange("X10").getValue(), platLgc: sheet.getRange("Y10").getValue(),
+          goldFsk: sheet.getRange("X11").getValue(), goldLgc: sheet.getRange("Y11").getValue(),
+          regFsk: sheet.getRange("X12").getValue(),  regLgc: sheet.getRange("Y12").getValue(),
+          gamas: sheet.getRange("V15").getValue(),   nongamas: sheet.getRange("Y15").getValue(),
+          real: sheet.getRange("U18").getValue(),   ach: sheet.getRange("X18").getValue()
+        },
+        
+        ag: {
+          open: sheet.getRange("AD6").getValue(),   // Total Ggn Berulang
+          diaFsk: sheet.getRange("AE9").getValue(),  diaLgc: sheet.getRange("AF9").getValue(),
+          platFsk: sheet.getRange("AE10").getValue(), platLgc: sheet.getRange("AF10").getValue(),
+          goldFsk: sheet.getRange("AE11").getValue(), goldLgc: sheet.getRange("AF11").getValue(),
+          regFsk: sheet.getRange("AE12").getValue(),  regLgc: sheet.getRange("AF12").getValue(),
+          gamas: sheet.getRange("AC15").getValue(),   nongamas: sheet.getRange("AF15").getValue(),
+          real: sheet.getRange("AB18").getValue(),   ach: sheet.getRange("AE18").getValue()
+        },
+        
+        ttr1: { // 3Jam_MANJA
+          open: sheet.getRange("I26").getValue(),   c: sheet.getRange("J29").getValue(),   nc: sheet.getRange("K29").getValue(),
+          gamC: sheet.getRange("J31").getValue(),   gamNc: sheet.getRange("K31").getValue(), gamReal: sheet.getRange("L31").getValue(),
+          nongamC: sheet.getRange("J32").getValue(), nongamNc: sheet.getRange("K32").getValue(), nongamReal: sheet.getRange("L32").getValue(),
+          real: sheet.getRange("G35").getValue(),   ach: sheet.getRange("J35").getValue()
+        },
+        
+        ttr2: { // 3Jam_DIAMOND
+          open: sheet.getRange("P26").getValue(),   c: sheet.getRange("Q29").getValue(),   nc: sheet.getRange("R29").getValue(),
+          gamC: sheet.getRange("Q31").getValue(),   gamNc: sheet.getRange("R31").getValue(), gamReal: sheet.getRange("S31").getValue(),
+          nongamC: sheet.getRange("Q32").getValue(), nongamNc: sheet.getRange("R32").getValue(), nongamReal: sheet.getRange("S32").getValue(),
+          real: sheet.getRange("N35").getValue(),   ach: sheet.getRange("Q35").getValue()
+        },
+        
+        ttr3: { // 6Jam_PLATINUM
+          open: sheet.getRange("W26").getValue(),   c: sheet.getRange("X29").getValue(),   nc: sheet.getRange("Y29").getValue(),
+          gamC: sheet.getRange("X31").getValue(),   gamNc: sheet.getRange("Y31").getValue(), gamReal: sheet.getRange("Z31").getValue(),
+          nongamC: sheet.getRange("X32").getValue(), nongamNc: sheet.getRange("Y32").getValue(), nongamReal: sheet.getRange("Z32").getValue(),
+          real: sheet.getRange("U35").getValue(),   ach: sheet.getRange("X35").getValue()
+        },
+        
+        ttr4: { // 12Jam_GOLD
+          open: sheet.getRange("AD26").getValue(),   c: sheet.getRange("AE29").getValue(),   nc: sheet.getRange("AF29").getValue(),
+          gamC: sheet.getRange("AE31").getValue(),   gamNc: sheet.getRange("AF31").getValue(), gamReal: sheet.getRange("AG31").getValue(),
+          nongamC: sheet.getRange("AE32").getValue(), nongamNc: sheet.getRange("AF32").getValue(), nongamReal: sheet.getRange("AG32").getValue(),
+          real: sheet.getRange("AB35").getValue(),   ach: sheet.getRange("AE35").getValue()
+        },
+        
+        ttr5: { // 24Jam_REGULER
+          open: sheet.getRange("AK26").getValue(),   c: sheet.getRange("AL29").getValue(),   nc: sheet.getRange("AM29").getValue(),
+          gamC: sheet.getRange("AL31").getValue(),   gamNc: sheet.getRange("AM31").getValue(), gamReal: sheet.getRange("AN31").getValue(),
+          nongamC: sheet.getRange("AL32").getValue(), nongamNc: sheet.getRange("AM32").getValue(), nongamReal: sheet.getRange("AN32").getValue(),
+          real: sheet.getRange("AI35").getValue(),   ach: sheet.getRange("AL35").getValue()
+        }
+      }
+    };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
 }
