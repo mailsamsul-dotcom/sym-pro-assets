@@ -7,7 +7,7 @@
     <!-- Tailwind CSS untuk presisi Layout & Responsif -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Google Fonts: Poppins -->
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <!-- FontAwesome untuk Icon -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- SheetJS untuk membaca dan mengekspor file Excel (.xlsx) -->
@@ -28,11 +28,32 @@
     <div id="auth-bg" class="fixed inset-0 z-0 pointer-events-none overflow-hidden">
         <div class="absolute top-0 right-0 w-[500px] h-[500px] opacity-50" style="background-image: radial-gradient(#93c5fd 2px, transparent 2px); background-size: 20px 20px;"></div>
         <div class="absolute bottom-0 left-0 w-[400px] h-[400px] opacity-40" style="background-image: radial-gradient(#93c5fd 2px, transparent 2px); background-size: 20px 20px;"></div>
-        <svg class="absolute bottom-0 left-0 w-full h-auto opacity-70" viewBox="0 0 1440 320" xmlns="http://www.w3.org/2000/svg"><path fill="#cce0ff" fill-opacity="1" d="M0,160L48,176C96,192,192,224,288,213.3C384,203,480,149,576,149.3C672,149,768,203,864,224C960,245,1056,235,1152,208C1248,181,1344,139,1392,117.3L1440,96L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path><path fill="#a3cbff" fill-opacity="0.6" d="M0,256L48,240C96,224,192,192,288,186.7C384,181,480,203,576,213.3C672,224,768,224,864,208C960,192,1056,160,1152,149.3C1248,139,1344,149,1392,154.7L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>
     </div>
 
     <!-- Sistem Notifikasi Toast -->
     <div id="toast" class="fixed top-8 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl text-sm font-semibold transition-all duration-300 opacity-0 pointer-events-none z-50 flex items-center gap-3"><i id="toast-icon" class="fas"></i><span id="toast-msg"></span></div>
+
+    <!-- MODAL IMBAL JASA DETAIL / DASHBOARD SQM -->
+    <div id="imbal-jasa-modal" class="hidden fixed inset-0 z-[75] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-[95vw] w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn">
+            <div class="bg-[#0d55d4] text-white px-6 py-4 flex items-center justify-between shrink-0">
+                <h3 class="text-sm font-bold flex items-center gap-2"><i class="fa-solid fa-table"></i> Detail Dashboard SQM & Imbal Jasa</h3>
+                <button onclick="closeImbalJasaModal()" class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-4 flex-1 overflow-auto bg-gray-50/50 custom-scrollbar">
+                <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                    <table class="w-full border-collapse kpi-table text-xs whitespace-nowrap">
+                        <thead id="sqm-modal-head">
+                            <tr><th class="bg-[#0f766e]">Memuat data...</th></tr>
+                        </thead>
+                        <tbody id="sqm-modal-body">
+                            <tr><td class="text-center py-6 text-gray-400">Klik Refresh Data pada Dashboard untuk memuat data SQM.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- MODAL DASHBOARD DETAIL -->
     <div id="dash-detail-modal" class="hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
@@ -45,17 +66,9 @@
                 <div class="overflow-auto h-full border border-gray-200 rounded-xl custom-scrollbar bg-white">
                     <table class="w-full text-left border-collapse whitespace-nowrap">
                         <thead class="bg-gray-100/80 sticky top-0 z-10 shadow-sm text-[10px] text-gray-500 font-bold uppercase tracking-wider">
-                            <tr>
-                                <th class="py-3 px-3">Workorder / TSEL ID</th>
-                                <th class="py-3 px-3">CRM Type</th>
-                                <th class="py-3 px-3">Customer</th>
-                                <th class="py-3 px-3">Status / Update</th>
-                                <th class="py-3 px-3">Tim Assign</th>
-                            </tr>
+                            <tr><th class="py-3 px-3">Workorder / TSEL ID</th><th class="py-3 px-3">CRM Type</th><th class="py-3 px-3">Customer</th><th class="py-3 px-3">Status / Update</th><th class="py-3 px-3">Tim Assign</th></tr>
                         </thead>
-                        <tbody id="dash-detail-body" class="text-xs text-gray-700 divide-y divide-gray-100">
-                            <!-- Injected by JS -->
-                        </tbody>
+                        <tbody id="dash-detail-body" class="text-xs text-gray-700 divide-y divide-gray-100"></tbody>
                     </table>
                 </div>
                 <div class="mt-2 text-[10px] text-gray-400 text-right" id="dash-modal-count">Total: 0 data</div>
@@ -63,7 +76,7 @@
         </div>
     </div>
 
-    <!-- MODAL DETAIL ORDER (Bersebelahan dengan Modal Dashboard) -->
+    <!-- MODAL DETAIL ORDER -->
     <div id="detail-modal" class="hidden fixed inset-0 z-[70] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
         <div class="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden animate-fadeIn relative ml-auto mr-auto md:ml-auto md:mr-8 border-4 border-[#0d55d4]/20">
             <div class="bg-[#0d55d4] text-white px-6 py-4 flex items-center justify-between shrink-0">
@@ -77,15 +90,40 @@
             </div>
             <div class="bg-white px-6 py-3 border-t border-gray-100 flex items-center justify-between shrink-0">
                 <button onclick="closeDetailModal()" class="px-5 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-xl text-xs transition">Tutup</button>
-                <div class="flex items-center gap-2" id="btn-assign-container">
-                    <!-- Buttons will be dynamically inserted here -->
-                </div>
+                <div class="flex items-center gap-2" id="btn-assign-container"></div>
             </div>
         </div>
     </div>
     
     <div id="tech-modal" class="hidden fixed inset-0 z-[9999] bg-black/50 flex items-center justify-center p-4">
         <div class="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl animate-fadeIn"><h3 class="text-sm font-bold text-gray-900"><i class="fa-solid fa-users text-[#0d55d4] mr-2"></i> Pilih Tim (Assign)</h3><div class="space-y-3 text-xs"><div><label class="block font-bold text-gray-700 mb-1">PILIHAN TIM</label><select id="select-tim" class="input-field pl-3" onchange="checkTechFormValidity()"><option value="">-- Pilih Tim --</option></select></div><p class="text-[10px] text-gray-400 italic">Leader dan Member otomatis mengikuti pengaturan di menu Mapping Tim.</p></div><div class="flex justify-end gap-2 pt-2"><button type="button" onclick="closeTechModal()" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-xl text-xs transition">Batal</button><button type="button" id="btn-submit-tech" onclick="confirmAndAssign()" disabled class="px-4 py-2 bg-blue-300 text-white font-semibold rounded-xl text-xs cursor-not-allowed transition">Kirim ke Telegram</button></div></div>
+    </div>
+
+    <!-- MODAL ADD / EDIT TO DO TASK -->
+    <div id="todo-task-modal" class="hidden fixed inset-0 z-[80] bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl animate-fadeIn overflow-hidden">
+            <div class="bg-[#f8fafc] border-b border-gray-200 px-5 py-4 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-gray-800" id="todo-modal-title"><i class="fa-solid fa-plus text-[#0d55d4] mr-1"></i> New Task</h3>
+                <button onclick="closeToDoModal()" class="text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="p-5 space-y-4 text-xs">
+                <input type="hidden" id="todo-input-id"><input type="hidden" id="todo-input-row">
+                <div><label class="block font-bold text-gray-700 mb-1">Title Task</label><input type="text" id="todo-input-title" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none focus:border-blue-500" placeholder="Apa yang perlu dilakukan?"></div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block font-bold text-gray-700 mb-1">Type</label><select id="todo-input-type" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none bg-white"><option value="Daily">Daily Task</option><option value="Weekly">Weekly Task</option></select></div>
+                    <div><label class="block font-bold text-gray-700 mb-1">Time (Opsional)</label><input type="text" id="todo-input-time" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none" placeholder="e.g 08:30"></div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div><label class="block font-bold text-gray-700 mb-1">Status</label><select id="todo-input-status" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none bg-white"><option value="To Do">To Do</option><option value="In Progress">In Progress</option><option value="Done">Done</option></select></div>
+                    <div><label class="block font-bold text-gray-700 mb-1">Priority</label><select id="todo-input-priority" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none bg-white"><option value="Low">Low</option><option value="Medium">Medium</option><option value="High">High</option></select></div>
+                </div>
+                <div><label class="block font-bold text-gray-700 mb-1">Assign To</label><select id="todo-input-assignee" class="w-full border border-gray-200 rounded-lg px-3 py-2 outline-none bg-white"><option value="">-- Memuat User... --</option></select></div>
+            </div>
+            <div class="bg-gray-50 px-5 py-3 border-t border-gray-200 flex justify-end gap-2">
+                <button onclick="closeToDoModal()" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 font-semibold rounded-lg text-xs transition">Batal</button>
+                <button id="btn-save-todo" onclick="saveToDoTask()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg text-xs transition shadow-sm">Save Task</button>
+            </div>
+        </div>
     </div>
 
     <!-- AUTH CARD -->
@@ -137,75 +175,472 @@
     <div id="dashboard-wrapper" class="hidden fixed inset-0 z-20 bg-[#f8fafc] flex flex-col w-full h-full overflow-hidden">
         <header class="bg-white border-b border-gray-200 h-14 flex items-center justify-between px-6 sticky top-0 z-30 shrink-0">
             <div class="flex items-center gap-3 px-1 py-1">
-
-              <img
-                  src="https://raw.githubusercontent.com/mailsamsul-dotcom/sym-pro-assets/main/SyM_Pro.png"
-                  alt="SymPro Logo"
-                  class="w-11 h-11 object-contain select-none">
-
+              <img src="https://raw.githubusercontent.com/mailsamsul-dotcom/sym-pro-assets/main/SyM_Pro.png" alt="SymPro Logo" class="w-11 h-11 object-contain select-none">
               <div class="leading-tight">
-
-                  <h1 class="text-lg font-extrabold tracking-wide text-slate-800">
-                      SymPro
-                  </h1>
-
-                  <p class="text-[11px] text-gray-500">
-                      System Management Order Provisioning
-                  </p>
-
+                  <h1 class="text-lg font-extrabold tracking-wide text-slate-800">SymPro</h1>
+                  <p class="text-[11px] text-gray-500">System Management Order Provisioning</p>
               </div>
-
             </div>
             <div class="flex items-center gap-4"><span class="text-xs font-semibold text-gray-700" id="user-role-badge">Role: USER</span><button onclick="logout()" class="text-xs text-red-500 hover:underline font-medium"><i class="fa-solid fa-power-off mr-1"></i> Logout</button></div>
         </header>
 
         <div class="flex flex-1 overflow-hidden">
-            <!-- SIDEBAR -->
+            <!-- SIDEBAR RESMI -->
             <aside class="w-64 bg-white border-r border-gray-200 flex flex-col p-4 shrink-0 hidden md:flex overflow-y-auto custom-scrollbar">
                 <div class="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-3 px-3">Main</div>
                 <nav class="space-y-1 mb-8">
-                    <a href="#" onclick="switchMenu('dashboard')" id="menu-dashboard" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-chart-pie"></i> Dashboard KPI</a>
-                    <a href="#" onclick="switchMenu('daily-report')" id="menu-daily-report" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-blue-50 text-[#0d55d4] font-semibold"><i class="fa-solid fa-chart-line"></i> Daily Report</a>
-                    <a href="#" onclick="switchMenu('order-hi')" id="menu-order-hi" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-user-check text-[#0d55d4]"></i> Order Hi</a>
+                    
+                    <!-- 1. DASHBOARD KPI -->
                     <div>
-                        <div onclick="toggleSubMenu('submenu-workorder')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
-                            <span class="flex items-center gap-3"><i class="fa-solid fa-list-check text-blue-600"></i> All Work Order</span><i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-workorder"></i>
+                        <div onclick="toggleSubMenu('submenu-dashboard')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            <span class="flex items-center gap-3"><i class="fa-solid fa-chart-pie text-blue-600"></i> Dashboard KPI</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-dashboard"></i>
                         </div>
-                        <div id="submenu-workorder" class="hidden pl-6 space-y-1 mt-1">
-                            <a href="#" onclick="switchMenu('daily-order')" id="menu-daily-order" class="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition"><span>Inbox Assign</span><span id="unassigned-badge" class="hidden bg-red-500 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">0</span></a>
-                            <a href="#" onclick="switchMenu('order-kendala')" id="menu-order-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Inbox Kendala</a>
+                        <div id="submenu-dashboard" class="hidden pl-6 space-y-1 mt-1">
+                            <a href="#" onclick="switchMenu('dashboard-b2c')" id="menu-dashboard-b2c" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">KPI Ass B2C</a>
+                            <a href="#" onclick="switchMenu('dashboard-prov-b2c')" id="menu-dashboard-prov-b2c" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">KPI Prov B2C</a>
+                            <a href="#" onclick="switchMenu('dashboard-sqm')" id="menu-dashboard-sqm" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Result SQM</a>
                         </div>
                     </div>
-                    <a href="#" onclick="switchMenu('order-completed')" id="menu-order-completed" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-check-double text-green-600"></i> List Order Completed</a>
-                    <a href="#" onclick="switchMenu('data-kendala')" id="menu-data-kendala" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-triangle-exclamation"></i> List Kendala Teknik</a>
-                    <a href="#" onclick="switchMenu('board-kendala')" id="menu-board-kendala" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-clipboard-list"></i> Board Kendala Teknik</a>
-                    <a href="#" onclick="switchMenu('mapping-tim')" id="menu-mapping-tim" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-people-group"></i> Mapping Tim</a>
-                    <a href="#" onclick="switchMenu('manage-user')" id="menu-manage-user" class="hidden items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-user-gear"></i> Management User</a>
-                    <a href="#" onclick="switchMenu('update-data')" id="menu-update-data" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-rotate"></i> Update Data</a>
+
+                    <!-- 2. ALL WORK ORDER -->
+                    <div>
+                        <div onclick="toggleSubMenu('submenu-workorder')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            <span class="flex items-center gap-3"><i class="fa-solid fa-list-check text-blue-600"></i> All Work Order</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-workorder"></i>
+                        </div>
+                        <div id="submenu-workorder" class="hidden pl-6 space-y-1 mt-1">
+                            <a href="#" onclick="switchMenu('daily-report')" id="menu-daily-report" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Daily Report</a>
+                            <a href="#" onclick="switchMenu('daily-order')" id="menu-daily-order" class="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">
+                                <span>Inbox Assign</span>
+                                <span id="unassigned-badge" class="hidden bg-red-500 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">0</span>
+                            </a>
+                            <a href="#" onclick="switchMenu('order-hi')" id="menu-order-hi" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Order Hi</a>
+                            <a href="#" onclick="switchMenu('order-kendala')" id="menu-order-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Inbox Kendala</a>
+                            <a href="#" onclick="switchMenu('order-completed')" id="menu-order-completed" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Order Completed</a>
+                            <a href="#" onclick="switchMenu('data-kendala')" id="menu-data-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Kendala Teknik</a>
+                            <a href="#" onclick="switchMenu('board-kendala')" id="menu-board-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Board Kendala Teknik</a>
+                        </div>
+                    </div>
+
+                    <!-- 3. TO DO LIST -->
+                    <a href="#" onclick="switchMenu('todo-list')" id="menu-todo-list" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">
+                        <i class="fa-regular fa-square-check"></i> To Do List
+                    </a>
+
+                    <!-- MENU BARU: USULAN QE -->
+                    <a href="#" onclick="switchMenu('usulan-qe')" id="menu-usulan-qe" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">
+                        <i class="fa-solid fa-lightbulb text-amber-500"></i> Usulan QE
+                    </a>
+
+                    <!-- 4. UPDATE DATA -->
+                    <a href="#" onclick="switchMenu('update-data')" id="menu-update-data" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">
+                        <i class="fa-solid fa-rotate"></i> Update Data
+                    </a>
+
+                    <!-- 5. PENGATURAN -->
+                    <div>
+                        <div onclick="toggleSubMenu('submenu-pengaturan')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            <span class="flex items-center gap-3"><i class="fa-solid fa-gear text-slate-600"></i> Pengaturan</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-pengaturan"></i>
+                        </div>
+                        <div id="submenu-pengaturan" class="hidden pl-6 space-y-1 mt-1">
+                            <a href="#" onclick="switchMenu('mapping-tim')" id="menu-mapping-tim" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Mapping Tim</a>
+                            <a href="#" onclick="switchMenu('manage-user')" id="menu-manage-user" class="hidden px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Management User</a>
+                            <!-- SUB-MENU BARU: DATA NAKER -->
+                            <a href="#" onclick="switchMenu('data-naker')" id="menu-data-naker" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Data Naker</a>
+                        </div>
+                    </div>
+
                 </nav>
+
+                <!-- 6. PROFIL PENGGUNA -->
                 <div class="text-[10px] uppercase tracking-wider font-bold text-gray-400 mb-3 px-3">Account</div>
-                <nav class="space-y-1"><a href="#" onclick="logout()" class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50"><i class="fa-solid fa-right-from-bracket"></i> Log out</a></nav>
+                <nav class="space-y-1">
+                    <a href="#" onclick="switchMenu('user-profile')" id="menu-user-profile" class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">
+                        <i class="fa-regular fa-circle-user"></i> Profil Pengguna
+                    </a>
+                    <a href="#" onclick="logout()" class="flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50">
+                        <i class="fa-solid fa-right-from-bracket"></i> Log out
+                    </a>
+                </nav>
             </aside>
 
             <!-- KONTEN UTAMA -->
-            <main class="flex-1 overflow-y-auto custom-scrollbar bg-[#f8fafc] flex flex-col relative">
+            <main class="flex-1 overflow-y-auto custom-scrollbar bg-white flex flex-col relative">
                 
-                <!-- VIEW: DASHBOARD KPI -->
-                <div id="view-wrapper-dashboard" class="hidden w-full h-full p-6 md:p-8 space-y-6 block">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
-                        <div>
-                            <h1 class="text-2xl font-bold text-gray-900 mb-1 tracking-tight">Dashboard KPI</h1>
-                            <p class="text-xs text-gray-500 font-medium">Coming soon...</p>
+                <!-- VIEW WRAPPER: DASHBOARD KPI -->
+                <!-- VIEW WRAPPER: DASHBOARD KPI ASS B2C -->
+                <div id="view-wrapper-dashboard" class="hidden w-full h-full p-4 lg:p-8 bg-[#f8fafc] text-gray-800 overflow-y-auto custom-scrollbar">
+                    
+                    <div id="dashboard-ass-b2c-content" class="max-w-[1350px] mx-auto space-y-6">
+                        
+                        <!-- SECTION 1: TOP ROW (4 KARTU: RESUME, SA, AG, IMBAL JASA) -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-stretch">
+                            
+                            <!-- KARTU 1: RESUME KPI B2C -->
+                            <div class="lg:col-span-4 b2c-card-ref p-4 justify-between">
+                                <div class="b2c-card-title-ref">RESUME KPI B2C</div>
+                                <div class="flex items-center gap-4 my-auto">
+                                    <div class="flex flex-col items-center text-center w-5/12 border-r border-slate-100 pr-3">
+                                        <img src="https://i.ibb.co.com/svJzkKWZ/99222-computer-network-hq-image-free.png" alt="Router" class="w-50 mb-3 object-contain">
+                                        <div class="text-3xl font-black text-blue-600 leading-none" id="ass-tot-list">0</div>
+                                        <div class="text-[11px] text-blue-500 font-bold uppercase mt-1">TOTAL LIST</div>
+                                    </div>
+                                    <div class="w-7/12 text-[10px] space-y-1.5 font-semibold">
+                                        <div class="text-[11px] font-extrabold text-blue-600 mb-2">TARGET KPI</div>
+                                        <div class="flex items-center gap-1.5"><span class="font-extrabold text-blue-600 w-10 text-right">98,52</span><span>- Target Service Availability</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-extrabold text-rose-600 w-10 text-right">268</span><span>- Maksimal Tiket Open</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-extrabold text-rose-600 w-10 text-right">8</span><span>- Target Daily Open</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-extrabold text-blue-600 w-10 text-right">91,71</span><span>- Target Assurance Guarantee</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-bold text-slate-700 w-10 text-right">94,79</span><span>- Target TTR Comply 3H Manja</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-bold text-slate-700 w-10 text-right">95,25</span><span>- Target TTR Comply 3H (O)*</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-bold text-slate-700 w-10 text-right">95</span><span>- Target TTR Comply 6H (P)</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-bold text-slate-700 w-10 text-right">83</span><span>- Target TTR Comply 12H (Gold)</span></div>
+                                        <div class="flex items-center gap-1.5"><span class="font-bold text-slate-700 w-10 text-right">86,7</span><span>- Target TTR Comply 24H (NON HVC)</span></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KARTU 2: SERVICE AVAILABILITY -->
+                            <div class="lg:col-span-3 b2c-card-ref justify-between">
+                                <div class="p-4 pb-0 flex-1 flex flex-col justify-between">
+                                    <div class="b2c-card-title-ref">SERVICE AVAILABILITY</div>
+                                    <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
+                                        <img src="https://i.ibb.co.com/PGLy6kPY/pngtree-wireless-router-design-png-image-15697165.png" alt="Server" class="w-20 opacity-80">
+                                        <div class="text-right">
+                                            <span class="text-xs font-bold text-slate-700">Total Tiket Open</span>
+                                            <div class="text-lg font-black text-slate-900"><span id="ass-sa-open">0</span> <span class="text-xs font-normal">Tiket</span></div>
+                                        </div>
+                                    </div>
+                                    <table class="b2c-table-ref mb-3">
+                                        <tr class="font-bold text-slate-800"><td class="text-left"></td><td class="text-right w-8">Fsk</td><td class="text-right w-8">Lgc</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_DIAMOND</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-dia-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-dia-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_PLATINUM</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-plat-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-plat-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_GOLD</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-gold-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-gold-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">REGULER</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-reg-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-sa-reg-lgc">0</td></tr>
+                                    </table>
+                                    <div class="flex justify-around text-xs font-bold py-2 border-t border-slate-100">
+                                        <div class="text-center"><span class="text-[10px] text-rose-600 block uppercase">GAMAS</span><span id="ass-sa-gamas" class="text-sm font-black text-rose-600">0</span></div>
+                                        <div class="text-center"><span class="text-[10px] text-blue-600 block uppercase">NONGAMAS</span><span id="ass-sa-nongamas" class="text-sm font-black text-blue-600">0</span></div>
+                                    </div>
+                                    <div class="text-center text-[11px] font-bold text-blue-600 pb-2">Achievement (from Tgt 98,52)</div>
+                                </div>
+                                <div class="b2c-ach-footer">
+                                    <div class="b2c-ach-col-ref">
+                                        <div class="text-xl font-black text-slate-800" id="ass-sa-real">0,00%</div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Realisasi</div>
+                                    </div>
+                                    <div class="b2c-ach-col-ref">
+                                        <div class="text-xl font-black text-rose-600" id="ass-sa-ach">0%</div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Ach KPI</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KARTU 3: ASSURANCE GUARANTEE -->
+                            <div class="lg:col-span-3 b2c-card-ref justify-between">
+                                <div class="p-4 pb-0 flex-1 flex flex-col justify-between">
+                                    <div class="b2c-card-title-ref">ASSURANCE GUARANTEE</div>
+                                    <div class="flex items-center justify-between pb-3 mb-2 border-b border-slate-100">
+                                        <div class="w-9 h-9 bg-slate-900 text-white flex items-center justify-center rounded-lg text-sm shrink-0"><i class="fa-solid fa-arrow-right-arrow-left"></i></div>
+                                        <div class="text-right">
+                                            <span class="text-xs font-bold text-slate-700">Total Ggn Berulang</span>
+                                            <div class="text-lg font-black text-slate-900"><span id="ass-ag-open">0</span> <span class="text-xs font-normal">Tiket</span></div>
+                                        </div>
+                                    </div>
+                                    <table class="b2c-table-ref mb-3">
+                                        <tr class="font-bold text-slate-800"><td class="text-left"></td><td class="text-right w-8">Fsk</td><td class="text-right w-8">Lgc</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_DIAMOND</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-dia-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-dia-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_PLATINUM</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-plat-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-plat-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">HVC_GOLD</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-gold-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-gold-lgc">0</td></tr>
+                                        <tr class="italic text-slate-600"><td class="text-left">REGULER</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-reg-fsk">0</td><td class="text-right font-extrabold text-slate-900" id="ass-ag-reg-lgc">0</td></tr>
+                                    </table>
+                                    <div class="flex justify-around text-xs font-bold py-2 border-t border-slate-100">
+                                        <div class="text-center"><span class="text-[10px] text-rose-600 block uppercase">GAMAS</span><span id="ass-ag-gamas" class="text-sm font-black text-rose-600">0</span></div>
+                                        <div class="text-center"><span class="text-[10px] text-rose-600 block uppercase">NONGAMAS</span><span id="ass-ag-nongamas" class="text-sm font-black text-rose-600">0</span></div>
+                                    </div>
+                                    <div class="text-center text-[11px] font-bold text-blue-600 pb-2">Achievement (from Tgt 91,71)</div>
+                                </div>
+                                <div class="b2c-ach-footer">
+                                    <div class="b2c-ach-col-ref">
+                                        <div class="text-xl font-black text-slate-800" id="ass-ag-real">0,00%</div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Realisasi</div>
+                                    </div>
+                                    <div class="b2c-ach-col-ref">
+                                        <div class="text-xl font-black text-rose-600" id="ass-ag-ach">0%</div>
+                                        <div class="text-[10px] font-bold text-slate-400 uppercase mt-0.5">Ach KPI</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- KARTU 4: IMBAL JASA ASSURANCE -->
+                            <div class="lg:col-span-2 b2c-card-ref p-6 justify-center items-center text-center">
+                                <h3 class="text-xs font-extrabold text-slate-800 uppercase tracking-wide mb-2 leading-snug">IMBAL JASA ASSURANCE 2026</h3>
+                                <div class="text-xs font-bold text-slate-700 mb-4" id="imbal-jasa-date-label">24 Juli 2026</div>
+                                <p class="text-[10px] text-slate-400 italic mb-6 leading-relaxed">
+                                    Data Source: Nonatero Assurance, Proman, IXSA, Nonatero WSA
+                                </p>
+                                <button onclick="openImbalJasaModal()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded-lg text-xs transition-all shadow-sm flex items-center gap-2">
+                                    <span>Lihat Detail</span>
+                                    <i class="fa-solid fa-arrow-right"></i>
+                                </button>
+                            </div>
+                            
                         </div>
+
+                        <!-- SECTION 2: TTR COMPLIANCE (5 KARTU SEJAJAR) -->
+                        <div class="b2c-card-ref p-5">
+                            <div class="b2c-card-title-ref !mb-4">TTR COMPLIANCE</div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+                                
+                                <!-- CARD 1: 3Jam MANJA -->
+                                <div class="ttr-card-ref">
+                                    <div class="ttr-header-ref">3Jam_MANJA <i class="fa-regular fa-calendar text-orange-500 ml-1"></i></div>
+                                    <div class="p-3 flex-1 flex flex-col justify-between">
+                                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                            <img src="https://i.ibb.co.com/wrJR3T93/images-1.jpg" alt="Server" class="w-20 opacity-80">
+                                            <div class="text-right">
+                                                <span class="text-[10px] text-slate-500 block">Total Tiket Close</span>
+                                                <span class="text-base font-black text-slate-800"><span id="ass-ttr1-open">0</span> <span class="text-[10px] font-normal">Tiket</span></span>
+                                            </div>
+                                        </div>
+                                        <table class="b2c-table-ref mb-2 text-center">
+                                            <tr class="font-bold text-rose-600 border-b border-slate-100"><td class="text-left"></td><td>C</td><td>NC</td><td class="text-slate-800">Real</td></tr>
+                                            <tr><td class="text-left font-medium">Compliance</td><td class="font-black text-slate-800" id="ass-ttr1-comp-c">0</td><td class="font-black text-rose-600" id="ass-ttr1-comp-nc">0</td><td>-</td></tr>
+                                            <tr><td class="text-left font-medium">GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr1-gam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr1-gam-nc">0</td><td id="ass-ttr1-gam-real">0%</td></tr>
+                                            <tr><td class="text-left font-medium">NON_GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr1-nongam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr1-nongam-nc">0</td><td id="ass-ttr1-nongam-real">0%</td></tr>
+                                        </table>
+                                        <div class="text-center text-[10px] font-bold text-blue-600 pt-1">Achievement (from Tgt 94,79)</div>
+                                    </div>
+                                    <div class="b2c-ach-footer">
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black text-slate-800" id="ass-ttr1-real">0,00%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Realisasi</div>
+                                        </div>
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black" id="ass-ttr1-ach">0%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Ach KPI</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CARD 2: 3Jam DIAMOND -->
+                                <div class="ttr-card-ref">
+                                    <div class="ttr-header-ref">3Jam_DIAMOND <i class="fa-regular fa-gem text-blue-500 ml-1"></i></div>
+                                    <div class="p-3 flex-1 flex flex-col justify-between">
+                                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                            <img src="https://i.ibb.co.com/wrJR3T93/images-1.jpg" alt="Server" class="w-20 opacity-80">
+                                            <div class="text-right">
+                                                <span class="text-[10px] text-slate-500 block">Total Tiket Close</span>
+                                                <span class="text-base font-black text-slate-800"><span id="ass-ttr2-open">0</span> <span class="text-[10px] font-normal">Tiket</span></span>
+                                            </div>
+                                        </div>
+                                        <table class="b2c-table-ref mb-2 text-center">
+                                            <tr class="font-bold text-rose-600 border-b border-slate-100"><td class="text-left"></td><td>C</td><td>NC</td><td class="text-slate-800">Real</td></tr>
+                                            <tr><td class="text-left font-medium">Compliance</td><td class="font-black text-slate-800" id="ass-ttr2-comp-c">0</td><td class="font-black text-rose-600" id="ass-ttr2-comp-nc">0</td><td>-</td></tr>
+                                            <tr><td class="text-left font-medium">GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr2-gam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr2-gam-nc">0</td><td id="ass-ttr2-gam-real">0%</td></tr>
+                                            <tr><td class="text-left font-medium">NON_GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr2-nongam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr2-nongam-nc">0</td><td id="ass-ttr2-nongam-real">0%</td></tr>
+                                        </table>
+                                        <div class="text-center text-[10px] font-bold text-blue-600 pt-1">Achievement (from Tgt 95,25)</div>
+                                    </div>
+                                    <div class="b2c-ach-footer">
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black text-slate-800" id="ass-ttr2-real">0,00%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Realisasi</div>
+                                        </div>
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black" id="ass-ttr2-ach">0%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Ach KPI</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CARD 3: 6Jam PLATINUM -->
+                                <div class="ttr-card-ref">
+                                    <div class="ttr-header-ref">6Jam_PLATINUM <i class="fa-solid fa-medal text-slate-400 ml-1"></i></div>
+                                    <div class="p-3 flex-1 flex flex-col justify-between">
+                                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                            <img src="https://i.ibb.co.com/wrJR3T93/images-1.jpg" alt="Server" class="w-20 opacity-80">
+                                            <div class="text-right">
+                                                <span class="text-[10px] text-slate-500 block">Total Tiket Close</span>
+                                                <span class="text-base font-black text-slate-800"><span id="ass-ttr3-open">0</span> <span class="text-[10px] font-normal">Tiket</span></span>
+                                            </div>
+                                        </div>
+                                        <table class="b2c-table-ref mb-2 text-center">
+                                            <tr class="font-bold text-rose-600 border-b border-slate-100"><td class="text-left"></td><td>C</td><td>NC</td><td class="text-slate-800">Real</td></tr>
+                                            <tr><td class="text-left font-medium">Compliance</td><td class="font-black text-slate-800" id="ass-ttr3-comp-c">0</td><td class="font-black text-rose-600" id="ass-ttr3-comp-nc">0</td><td>-</td></tr>
+                                            <tr><td class="text-left font-medium">GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr3-gam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr3-gam-nc">0</td><td id="ass-ttr3-gam-real">0%</td></tr>
+                                            <tr><td class="text-left font-medium">NON_GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr3-nongam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr3-nongam-nc">0</td><td id="ass-ttr3-nongam-real">0%</td></tr>
+                                        </table>
+                                        <div class="text-center text-[10px] font-bold text-blue-600 pt-1">Achievement (from Tgt 95,0)</div>
+                                    </div>
+                                    <div class="b2c-ach-footer">
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black text-slate-800" id="ass-ttr3-real">0,00%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Realisasi</div>
+                                        </div>
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black" id="ass-ttr3-ach">0%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Ach KPI</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CARD 4: 12Jam GOLD -->
+                                <div class="ttr-card-ref">
+                                    <div class="ttr-header-ref">12Jam_GOLD <i class="fa-solid fa-crown text-yellow-500 ml-1"></i></div>
+                                    <div class="p-3 flex-1 flex flex-col justify-between">
+                                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                            <img src="https://i.ibb.co.com/wrJR3T93/images-1.jpg" alt="Server" class="w-20 opacity-80">
+                                            <div class="text-right">
+                                                <span class="text-[10px] text-slate-500 block">Total Tiket Close</span>
+                                                <span class="text-base font-black text-slate-800"><span id="ass-ttr4-open">0</span> <span class="text-[10px] font-normal">Tiket</span></span>
+                                            </div>
+                                        </div>
+                                        <table class="b2c-table-ref mb-2 text-center">
+                                            <tr class="font-bold text-rose-600 border-b border-slate-100"><td class="text-left"></td><td>C</td><td>NC</td><td class="text-slate-800">Real</td></tr>
+                                            <tr><td class="text-left font-medium">Compliance</td><td class="font-black text-slate-800" id="ass-ttr4-comp-c">0</td><td class="font-black text-rose-600" id="ass-ttr4-comp-nc">0</td><td>-</td></tr>
+                                            <tr><td class="text-left font-medium">GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr4-gam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr4-gam-nc">0</td><td id="ass-ttr4-gam-real">0%</td></tr>
+                                            <tr><td class="text-left font-medium">NON_GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr4-nongam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr4-nongam-nc">0</td><td id="ass-ttr4-nongam-real">0%</td></tr>
+                                        </table>
+                                        <div class="text-center text-[10px] font-bold text-blue-600 pt-1">Achievement (from Tgt 83,0)</div>
+                                    </div>
+                                    <div class="b2c-ach-footer">
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black text-slate-800" id="ass-ttr4-real">0,00%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Realisasi</div>
+                                        </div>
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black" id="ass-ttr4-ach">0%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Ach KPI</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- CARD 5: 24Jam REGULER -->
+                                <div class="ttr-card-ref">
+                                    <div class="ttr-header-ref">24Jam_REGULER <i class="fa-solid fa-user text-slate-700 ml-1"></i></div>
+                                    <div class="p-3 flex-1 flex flex-col justify-between">
+                                        <div class="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                                            <img src="https://i.ibb.co.com/wrJR3T93/images-1.jpg" alt="Server" class="w-20 opacity-80">
+                                            <div class="text-right">
+                                                <span class="text-[10px] text-slate-500 block">Total Tiket Close</span>
+                                                <span class="text-base font-black text-slate-800"><span id="ass-ttr5-open">0</span> <span class="text-[10px] font-normal">Tiket</span></span>
+                                            </div>
+                                        </div>
+                                        <table class="b2c-table-ref mb-2 text-center">
+                                            <tr class="font-bold text-rose-600 border-b border-slate-100"><td class="text-left"></td><td>C</td><td>NC</td><td class="text-slate-800">Real</td></tr>
+                                            <tr><td class="text-left font-medium">Compliance</td><td class="font-black text-slate-800" id="ass-ttr5-comp-c">0</td><td class="font-black text-rose-600" id="ass-ttr5-comp-nc">0</td><td>-</td></tr>
+                                            <tr><td class="text-left font-medium">GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr5-gam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr5-gam-nc">0</td><td id="ass-ttr5-gam-real">0%</td></tr>
+                                            <tr><td class="text-left font-medium">NON_GAMAS</td><td class="font-bold text-slate-800" id="ass-ttr5-nongam-c">0</td><td class="font-bold text-rose-600" id="ass-ttr5-nongam-nc">0</td><td id="ass-ttr5-nongam-real">0%</td></tr>
+                                        </table>
+                                        <div class="text-center text-[10px] font-bold text-blue-600 pt-1">Achievement (from Tgt 86,7)</div>
+                                    </div>
+                                    <div class="b2c-ach-footer">
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black text-slate-800" id="ass-ttr5-real">0,00%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Realisasi</div>
+                                        </div>
+                                        <div class="b2c-ach-col-ref">
+                                            <div class="text-sm font-black" id="ass-ttr5-ach">0%</div>
+                                            <div class="text-[9px] font-bold text-slate-400 uppercase">Ach KPI</div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+                <!-- VIEW WRAPPER: TO DO LIST (NOTION STYLE) -->
+                <div id="view-wrapper-todo-list" class="hidden w-full h-full pt-6 px-4 md:px-8 overflow-y-auto bg-white">
+                    <div class="w-full pb-20">
+                        <!-- Header Notion Style -->
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0 pb-6">
+                            <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-3 tracking-tight">
+                                <i class="fa-regular fa-square-check text-gray-300"></i> My Tasks Hub
+                            </h1>
+                            <div class="flex gap-2">
+                                <button onclick="loadToDoData(true)" class="text-gray-500 hover:bg-gray-100 px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                                <button id="btn-new-task" onclick="openTaskModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 rounded-md text-xs font-medium transition shadow-sm flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> New Task</button>
+                            </div>
+                        </div>
+
+                        <!-- Progress Bar Keseluruhan -->
+                        <div class="flex items-center gap-4 mb-8 text-xs text-gray-500 font-medium">
+                            <span id="todo-progress-text">0% completed</span>
+                            <div class="flex-1 bg-gray-100 h-1.5 rounded-full overflow-hidden">
+                                <div id="todo-progress-bar" class="bg-blue-500 h-full rounded-full transition-all duration-500" style="width: 0%;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Headers Column -->
+                        <div class="flex items-center px-4 pb-2 border-b border-gray-200 text-xs text-gray-400 font-medium select-none">
+                            <div class="w-8"></div>
+                            <div class="flex-1 min-w-[200px]">Task name</div>
+                            <div class="w-32 hidden md:block">Assignee</div>
+                            <div class="w-28 hidden sm:block">Status</div>
+                            <div class="w-28 hidden sm:block">Priority</div>
+                            <div class="w-32 text-right">Time / Date</div>
+                        </div>
+
+                        <!-- Indikator Loading -->
+                        <div id="todo-loading" class="text-center py-10">
+                            <i class="fa-solid fa-spinner fa-spin text-xl text-blue-500 mb-2"></i>
+                            <p class="text-[11px] text-gray-500">Memuat tasks dari database...</p>
+                        </div>
+
+                        <!-- Container Daily Task -->
+                        <div class="mt-6 mb-2 flex items-center gap-2 px-2 text-sm font-bold text-blue-800">
+                            <i class="fa-solid fa-sun text-orange-400"></i> Daily Tasks
+                        </div>
+                        <div id="notion-daily-container" class="space-y-1 mb-8 border border-gray-100 rounded-xl overflow-hidden p-1 shadow-sm bg-white"></div>
+
+                        <!-- Weekly Goal Tracker -->
+                        <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-4 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 text-lg"><i class="fa-solid fa-bullseye"></i></div>
+                                <div>
+                                    <h4 class="text-xs font-bold text-indigo-900">Weekly Goal</h4>
+                                    <p class="text-[10px] text-indigo-600">Selesaikan minimal 5 weekly tasks minggu ini.</p>
+                                </div>
+                            </div>
+                            <div class="text-right">
+                                <div class="text-lg font-extrabold text-indigo-700" id="weekly-goal-text">0 / 0</div>
+                            </div>
+                        </div>
+
+                        <!-- Container Weekly Task -->
+                        <div class="mt-6 mb-2 flex items-center gap-2 px-2 text-sm font-bold text-purple-800">
+                            <i class="fa-solid fa-calendar-week text-purple-400"></i> Weekly Tasks
+                        </div>
+                        <div id="notion-weekly-container" class="space-y-1 mb-8 border border-gray-100 rounded-xl overflow-hidden p-1 shadow-sm bg-white"></div>
+                    </div>
+                </div>
+
+                <!-- VIEW BARU: USULAN QE -->
+                <div id="view-wrapper-usulan-qe" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
+                    <div class="w-full h-full flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+                        <div class="w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center text-amber-500 text-3xl mb-4 shadow-sm">
+                            <i class="fa-solid fa-lightbulb"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800 mb-2">Usulan Quality Enhancement (QE)</h2>
+                        <p class="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+                            Kanvas siap. Menunggu penyusunan fitur Usulan QE...
+                        </p>
                     </div>
                 </div>
 
                 <!-- VIEW: DAILY REPORT DASHBOARD -->
-                <div id="view-wrapper-daily-report" class="w-full h-full p-6 md:p-8 space-y-6 block">
-                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2">
+                <div id="view-wrapper-daily-report" class="hidden w-full h-full p-6 md:p-8 space-y-6 bg-[#f8fafc] text-gray-800">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-2 shrink-0">
                         <div>
                             <h1 class="text-2xl font-bold text-gray-900 mb-1 tracking-tight">Daily Report</h1>
-                            <p class="text-xs text-gray-500 font-medium">Ringkasan monitoring order Service Area Kenjeran).</p>
+                            <p class="text-xs text-gray-500 font-medium">Ringkasan monitoring order Service Area Kenjeran.</p>
                         </div>
                         <div class="flex items-center gap-3">
                             <div class="bg-white border border-gray-200 px-4 py-2 rounded-lg text-[11px] font-semibold text-gray-600 flex items-center gap-2 shadow-sm"><i class="fa-regular fa-calendar text-gray-400"></i><span id="dash-date-range">...</span></div>
@@ -328,8 +763,8 @@
                     </div>
                 </div>
 
-                <!-- VIEW LAINNYA DIBAWAH INI -->
-                <div id="view-wrapper-daily-order" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW: DAILY ORDER, DLL -->
+                <div id="view-wrapper-daily-order" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full flex flex-col min-h-0 space-y-4">
                         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
                             <h1 id="view-title" class="text-lg font-bold text-gray-900"><i class="fa-solid fa-list-check text-[#0d55d4] mr-2"></i> List Daily Order</h1>
@@ -363,24 +798,18 @@
                                     <span id="table-row-count" class="font-semibold text-gray-600 mr-2">Menampilkan 0 data</span>
                                     <span class="italic hidden sm:inline-block">| Gunakan tombol Detail untuk memperbarui Order</span>
                                 </div>
-                                
-                                <!-- Tombol Pagination -->
                                 <div class="flex items-center gap-2">
-                                    <button id="btn-prev-page" onclick="changePage('prev')" class="px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed transition" disabled>
-                                        <i class="fa-solid fa-chevron-left"></i>
-                                    </button>
+                                    <button id="btn-prev-page" onclick="changePage('prev')" class="px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed transition" disabled><i class="fa-solid fa-chevron-left"></i></button>
                                     <span id="page-indicator" class="text-[11px] font-bold text-gray-600 px-2">Hal 0 dari 0</span>
-                                    <button id="btn-next-page" onclick="changePage('next')" class="px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed transition" disabled>
-                                        <i class="fa-solid fa-chevron-right"></i>
-                                    </button>
+                                    <button id="btn-next-page" onclick="changePage('next')" class="px-3 py-1.5 bg-gray-100 text-gray-400 rounded-lg text-[11px] font-bold cursor-not-allowed transition" disabled><i class="fa-solid fa-chevron-right"></i></button>
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- VIEW BARU: LIST DATA KENDALA -->
-                <div id="view-wrapper-data-kendala" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW: LIST KENDALA TEKNIK -->
+                <div id="view-wrapper-data-kendala" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full flex flex-col min-h-0 space-y-4">
                         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
                             <h1 class="text-lg font-bold text-gray-900"><i class="fa-solid fa-triangle-exclamation text-[#0d55d4] mr-2"></i> List Kendala Teknik</h1>
@@ -413,7 +842,8 @@
                     </div>
                 </div>
 
-                <div id="view-wrapper-board-kendala" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW: BOARD KENDALA TEKNIK -->
+                <div id="view-wrapper-board-kendala" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
                         <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 text-3xl mb-4 shadow-sm">
                             <i class="fa-solid fa-clipboard-list"></i>
@@ -425,7 +855,8 @@
                     </div>
                 </div>
 
-                <div id="view-wrapper-mapping-tim" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW: MAPPING TIM -->
+                <div id="view-wrapper-mapping-tim" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full overflow-y-auto custom-scrollbar space-y-6">
                         <h1 class="text-lg font-bold text-gray-900 shrink-0"><i class="fa-solid fa-people-group text-[#0d55d4] mr-2"></i> Mapping Tim</h1>
                         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -445,7 +876,8 @@
                     </div>
                 </div>
 
-                <div id="view-wrapper-manage-user" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW: MANAGEMENT USER -->
+                <div id="view-wrapper-manage-user" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full overflow-y-auto custom-scrollbar space-y-6">
                         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0">
                             <h1 class="text-lg font-bold text-gray-900"><i class="fa-solid fa-user-gear text-[#0d55d4] mr-2"></i> Management User</h1>
@@ -457,9 +889,23 @@
                     </div>
                 </div>
 
-                <div id="view-wrapper-update-data" class="hidden w-full h-full p-6 md:p-8">
+                <!-- VIEW BARU: DATA NAKER -->
+                <div id="view-wrapper-data-naker" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
+                    <div class="w-full h-full flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+                        <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 text-3xl mb-4 shadow-sm">
+                            <i class="fa-solid fa-users-gear"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800 mb-2">Data Tenaga Kerja (Naker)</h2>
+                        <p class="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
+                            Kanvas siap. Menunggu penyusunan fitur Data Naker...
+                        </p>
+                    </div>
+                </div>
+
+                <!-- VIEW: UPDATE DATA -->
+                <div id="view-wrapper-update-data" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
                     <div class="w-full h-full overflow-y-auto custom-scrollbar space-y-6">
-                        <div class="text-sm font-semibold text-[#0d55d4] flex items-center gap-2 cursor-pointer shrink-0" onclick="switchMenu('dashboard')"><i class="fa-solid fa-arrow-left"></i> Import Data Excel</div>
+                        <div class="text-sm font-semibold text-[#0d55d4] flex items-center gap-2 shrink-0"><i class="fa-solid fa-file-excel"></i> Import Data Excel</div>
                         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                             <div class="lg:col-span-4 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm space-y-5">
                                 <h3 class="text-sm font-bold text-gray-800">Upload Excel</h3>
@@ -473,6 +919,22 @@
                                 <div class="overflow-x-auto custom-scrollbar"><table class="w-full text-left border-collapse"><thead><tr class="border-b border-gray-100 text-[11px] text-gray-400 font-medium bg-blue-50/30"><th class="py-3 px-3">No.</th><th class="py-3 px-3">File</th><th class="py-3 px-3">Type</th><th class="py-3 px-3">Status</th><th class="py-3 px-3">By</th><th class="py-3 px-3">When</th></tr></thead><tbody id="history-table-body" class="text-xs text-gray-700 divide-y divide-gray-50"><tr><td class="py-3 px-3" colspan="6" class="text-center text-gray-400">Belum ada riwayat impor.</td></tr></tbody></table></div>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                <!-- VIEW BARU: PROFIL PENGGUNA -->
+                <div id="view-wrapper-user-profile" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
+                    <div class="w-full h-full flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
+                        <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-[#0d55d4] text-4xl mb-4 shadow-sm">
+                            <i class="fa-regular fa-circle-user"></i>
+                        </div>
+                        <h2 class="text-xl font-bold text-gray-800 mb-1" id="profile-display-name">Akun Anda</h2>
+                        <p class="text-xs text-gray-500 max-w-md mx-auto leading-relaxed mb-6" id="profile-display-role">
+                            Role: -
+                        </p>
+                        <button onclick="logout()" class="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-xs transition shadow-sm">
+                            <i class="fa-solid fa-right-from-bracket mr-1.5"></i> Log Out
+                        </button>
                     </div>
                 </div>
 
