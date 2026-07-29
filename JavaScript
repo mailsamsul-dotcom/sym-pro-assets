@@ -1,5 +1,10 @@
 <script>
     let tempUser = "";
+    
+    // CACHE UNTUK DASHBOARD KPI
+    let kpiAssB2CCache = null;
+    let kpiSqmCache = null;
+
     // VARIBEL PAGINATION BARU
     let currentPage = 1;
     let rowsPerPage = 50;
@@ -13,7 +18,10 @@
     // VARIBEL STATE UNTUK DATA KENDALA
     let kendalaHeaders = []; let kendalaRows = [];
     
-    let techniciansCache = []; let errorCodesCache = []; let mappingTimCache = [];
+    // STATE TO DO LIST DINAMIS DARI DATABASE
+    let dbTodoTasks = [];
+    
+    let techniciansCache = []; let errorCodesCache = []; let mappingTimCache = []; let usersCache = [];
     let currentActiveMode = 'daily-order';
 
     let modeDataCache = { 'list-daily-order': null, 'order-kendala': null, 'order-completed': null };
@@ -35,10 +43,22 @@
     let currentSortCol = null; let currentSortDir = 'asc';
 
     function applyRoleAccess(role) {
-        const roleLower = String(role).toLowerCase(); const manageUserMenu = document.getElementById('menu-manage-user');
-        if (manageUserMenu) {
-            if (roleLower === 'superadmin') { manageUserMenu.classList.remove('hidden'); manageUserMenu.classList.add('flex'); } 
-            else { manageUserMenu.classList.add('hidden'); manageUserMenu.classList.remove('flex'); }
+        const roleLower = String(role).toLowerCase(); 
+        const manageUserMenu = document.getElementById('menu-manage-user');
+        const btnNewTask = document.getElementById('btn-new-task');
+
+        if (roleLower === 'superadmin') { 
+            if(manageUserMenu) { 
+                manageUserMenu.classList.remove('hidden'); 
+                manageUserMenu.classList.add('block'); 
+            }
+            if(btnNewTask) btnNewTask.classList.remove('hidden');
+        } else { 
+            if(manageUserMenu) { 
+                manageUserMenu.classList.add('hidden'); 
+                manageUserMenu.classList.remove('block'); 
+            }
+            if(btnNewTask) btnNewTask.classList.add('hidden');
         }
     }
 
@@ -46,7 +66,8 @@
         const savedUser = localStorage.getItem("sym_pro_user"); const savedRole = localStorage.getItem("sym_pro_role");
 
         const today = new Date(); const dateString = today.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-        document.getElementById('dash-date-range').innerText = dateString + " - " + dateString;
+        const elDateRange = document.getElementById('dash-date-range');
+        if (elDateRange) elDateRange.innerText = dateString + " - " + dateString;
 
         if (savedUser) {
             document.getElementById('auth-bg').style.display = 'none'; document.getElementById('auth-card-container').style.display = 'none';
@@ -65,10 +86,124 @@
         });
     };
 
-    /* ======= FUNGSI DASHBOARD DI JS ======= */
+    // ===============================================================
+    // FUNGSI LOAD KPI DASHBOARD (MENGAMBIL VISUAL LANGSUNG DARI SPREADSHEET)
+    // ===============================================================
+    function loadKpiDashboard(menuName) {
+        if (typeof google === 'undefined') return;
+
+        if (menuName === 'dashboard-b2c') {
+            showMessage("Mengambil data rekap KPI Ass B2C dari Spreadsheet...", "success");
+            
+            google.script.run
+            .withSuccessHandler(function(res) {
+                if (res && res.success) {
+                    showMessage("Data KPI berhasil diperbarui!", "success");
+                    renderKpiAssB2CDirect(res.data);
+                } else {
+                    showMessage("Gagal: " + (res ? res.message : "Error server"), "error");
+                }
+            })
+            .withFailureHandler(function(err) {
+                showMessage("Error Server: " + err.message, "error");
+            })
+            .getKpiAssB2CSummary(); // Tarik angka hasil rumus spreadsheet
+        } 
+        else if (menuName === 'dashboard-sqm') {
+            // ... logika dashboard-sqm Anda ...
+        }
+    }
+
+    // FUNGSI RENDER LANGSUNG HASIL SPREADSHEET KE HTML DASHBOARD
+    function renderKpiAssB2CDirect(d) {
+        const setTxt = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val !== undefined && val !== null && val !== "" ? val : "0";
+        };
+
+        // 1. Total List Tiket
+        setTxt('ass-tot-list', Number(d.totalList || 0).toLocaleString('id-ID'));
+
+        // 2. Service Availability (SA)
+        setTxt('ass-sa-open',     Number(d.sa.open || 0).toLocaleString('id-ID'));
+        setTxt('ass-sa-dia-fsk',  d.sa.diaFsk);  setTxt('ass-sa-dia-lgc',  d.sa.diaLgc);
+        setTxt('ass-sa-plat-fsk', d.sa.platFsk); setTxt('ass-sa-plat-lgc', d.sa.platLgc);
+        setTxt('ass-sa-gold-fsk', d.sa.goldFsk); setTxt('ass-sa-gold-lgc', d.sa.goldLgc);
+        setTxt('ass-sa-reg-fsk',  d.sa.regFsk);  setTxt('ass-sa-reg-lgc',  d.sa.regLgc);
+        setTxt('ass-sa-gamas',    d.sa.gamas);   setTxt('ass-sa-nongamas', d.sa.nongamas);
+        
+        // Realisasi & Ach SA (Format desimal)
+        let saRealVal = Number(d.sa.real || 0);
+        let saAchVal  = Number(d.sa.ach || 0);
+        setTxt('ass-sa-real', (saRealVal > 1 ? saRealVal : saRealVal * 100).toFixed(2) + "%");
+        
+        const elSaAch = document.getElementById('ass-sa-ach');
+        if (elSaAch) {
+            let achDisplay = saAchVal > 1 ? saAchVal : saAchVal * 100;
+            elSaAch.innerText = achDisplay.toFixed(0) + "%";
+            elSaAch.className = achDisplay >= 100 ? "text-xl font-black text-emerald-600" : "text-xl font-black text-rose-600";
+        }
+
+        // 3. Assurance Guarantee (AG)
+        setTxt('ass-ag-open',     Number(d.ag.open || 0).toLocaleString('id-ID'));
+        setTxt('ass-ag-dia-fsk',  d.ag.diaFsk);  setTxt('ass-ag-dia-lgc',  d.ag.diaLgc);
+        setTxt('ass-ag-plat-fsk', d.ag.platFsk); setTxt('ass-ag-plat-lgc', d.ag.platLgc);
+        setTxt('ass-ag-gold-fsk', d.ag.goldFsk); setTxt('ass-ag-gold-lgc', d.ag.goldLgc);
+        setTxt('ass-ag-reg-fsk',  d.ag.regFsk);  setTxt('ass-ag-reg-lgc',  d.ag.regLgc);
+        setTxt('ass-ag-gamas',    d.ag.gamas);   setTxt('ass-ag-nongamas', d.ag.nongamas);
+
+        let agRealVal = Number(d.ag.real || 0);
+        let agAchVal  = Number(d.ag.ach || 0);
+        setTxt('ass-ag-real', (agRealVal > 1 ? agRealVal : agRealVal * 100).toFixed(2) + "%");
+        
+        const elAgAch = document.getElementById('ass-ag-ach');
+        if (elAgAch) {
+            let achDisplay = agAchVal > 1 ? agAchVal : agAchVal * 100;
+            elAgAch.innerText = achDisplay.toFixed(0) + "%";
+            elAgAch.className = achDisplay >= 100 ? "text-xl font-black text-emerald-600" : "text-xl font-black text-rose-600";
+        }
+
+        // 4. TTR Compliance Cards (TTR 1 s.d. 5)
+        const renderTtrDirect = (prefix, ttrData) => {
+            setTxt(`${prefix}-open`,    ttrData.open);
+            setTxt(`${prefix}-comp-c`,  ttrData.c);
+            setTxt(`${prefix}-comp-nc`, ttrData.nc);
+            
+            setTxt(`${prefix}-gam-c`,   ttrData.gamC);
+            setTxt(`${prefix}-gam-nc`,  ttrData.gamNc);
+            let gReal = Number(ttrData.gamReal || 0);
+            setTxt(`${prefix}-gam-real`, (gReal > 1 ? gReal : gReal * 100).toFixed(1) + "%");
+
+            setTxt(`${prefix}-nongam-c`,  ttrData.nongamC);
+            setTxt(`${prefix}-nongam-nc`, ttrData.nongamNc);
+            let ngReal = Number(ttrData.nongamReal || 0);
+            setTxt(`${prefix}-nongam-real`, (ngReal > 1 ? ngReal : ngReal * 100).toFixed(1) + "%");
+
+            let realVal = Number(ttrData.real || 0);
+            setTxt(`${prefix}-real`, (realVal > 1 ? realVal : realVal * 100).toFixed(2) + "%");
+            
+            let achVal = Number(ttrData.ach || 0);
+            let achDisplay = achVal > 1 ? achVal : achVal * 100;
+            const elAch = document.getElementById(`${prefix}-ach`);
+            if (elAch) {
+                elAch.innerText = achDisplay.toFixed(0) + "%";
+                elAch.className = achDisplay >= 100 ? "text-sm font-black text-emerald-600" : "text-sm font-black text-rose-600";
+            }
+        };
+
+        renderTtrDirect('ass-ttr1', d.ttr1);
+        renderTtrDirect('ass-ttr2', d.ttr2);
+        renderTtrDirect('ass-ttr3', d.ttr3);
+        renderTtrDirect('ass-ttr4', d.ttr4);
+        renderTtrDirect('ass-ttr5', d.ttr5);
+    }
+
+    /* ======= FUNGSI DASHBOARD (Daily Report) ======= */
     function loadDashboardData() {
         const loadingEl = document.getElementById('dash-loading'); const contentEl = document.getElementById('dash-content');
-        loadingEl.classList.remove('hidden'); contentEl.classList.add('hidden');
+        if (loadingEl && contentEl) {
+            loadingEl.classList.remove('hidden'); contentEl.classList.add('hidden');
+        }
 
         if (modeDataCache['list-daily-order']) {
             globalDailyHeaders = modeDataCache['list-daily-order'].headers;
@@ -82,7 +217,7 @@
                     globalDailyHeaders = res.headers;
                     globalDailyRows = res.rows;
                     processDashboardData(res.headers, res.rows);
-                } else { showMessage("Gagal memuat data dashboard", "error"); loadingEl.classList.add('hidden'); }
+                } else { showMessage("Gagal memuat data dashboard", "error"); if(loadingEl) loadingEl.classList.add('hidden'); }
             }).getDailyOrderData();
         }
     }
@@ -177,8 +312,10 @@
         for (let t in stats.timSummary) timArray.push({ tim: t, ...stats.timSummary[t] });
         timArray.sort((a, b) => b.total - a.total);
         
-        document.getElementById('dash-loading').classList.add('hidden');
-        document.getElementById('dash-content').classList.remove('hidden');
+        const elLoading = document.getElementById('dash-loading');
+        const elContent = document.getElementById('dash-content');
+        if(elLoading) elLoading.classList.add('hidden');
+        if(elContent) elContent.classList.remove('hidden');
 
         renderDashboardCards(stats);
         renderDashboardTable(timArray);
@@ -199,10 +336,14 @@
     function renderDashboardCards(data) {
         ['c1','c2','c3','c4','c5'].forEach((prefix, i) => {
             let cat = ['total', 'kp', 'kt', 'op', 'comp'][i];
-            document.getElementById(`${prefix}-all`).innerText = data[cat].all.toLocaleString();
-            document.getElementById(`${prefix}-cr`).innerText = data[cat].create.toLocaleString();
-            document.getElementById(`${prefix}-mi`).innerText = data[cat].migrate.toLocaleString();
-            document.getElementById(`${prefix}-mo`).innerText = data[cat].modify.toLocaleString();
+            const elAll = document.getElementById(`${prefix}-all`);
+            if (elAll) elAll.innerText = data[cat].all.toLocaleString();
+            const elCr = document.getElementById(`${prefix}-cr`);
+            if (elCr) elCr.innerText = data[cat].create.toLocaleString();
+            const elMi = document.getElementById(`${prefix}-mi`);
+            if (elMi) elMi.innerText = data[cat].migrate.toLocaleString();
+            const elMo = document.getElementById(`${prefix}-mo`);
+            if (elMo) elMo.innerText = data[cat].modify.toLocaleString();
         });
     }
 
@@ -226,10 +367,12 @@
                 <td class="py-2.5 px-2"><div class="w-full bg-gray-200 h-2 rounded-full overflow-hidden"><div class="bg-green-500 h-full rounded-full" style="width: ${pCt}%"></div></div></td>
             </tr>`;
         });
-        tBody.innerHTML = tHtml;
-        document.getElementById('ft-tot').innerText = totals.tot.toLocaleString(); document.getElementById('ft-kp').innerText = totals.kp.toLocaleString();
-        document.getElementById('ft-kt').innerText = totals.kt.toLocaleString(); document.getElementById('ft-op').innerText = totals.op.toLocaleString();
-        document.getElementById('ft-comp').innerText = totals.comp.toLocaleString();
+        if(tBody) tBody.innerHTML = tHtml;
+        const ftTot = document.getElementById('ft-tot'); if (ftTot) ftTot.innerText = totals.tot.toLocaleString(); 
+        const ftKp = document.getElementById('ft-kp');   if (ftKp) ftKp.innerText = totals.kp.toLocaleString();
+        const ftKt = document.getElementById('ft-kt');   if (ftKt) ftKt.innerText = totals.kt.toLocaleString(); 
+        const ftOp = document.getElementById('ft-op');   if (ftOp) ftOp.innerText = totals.op.toLocaleString();
+        const ftComp = document.getElementById('ft-comp'); if (ftComp) ftComp.innerText = totals.comp.toLocaleString();
     }
 
     function openDashDetail(category, type, teamKey = null) {
@@ -279,11 +422,16 @@
 
     function renderDonutChart(total, comp) {
         let sisa = total - comp; let ratio = total > 0 ? (comp / total * 100).toFixed(2) : 0;
-        document.getElementById('chart-pct').innerText = ratio + "%"; document.getElementById('ch-tot').innerText = total.toLocaleString();
-        document.getElementById('ch-comp').innerText = comp.toLocaleString(); document.getElementById('ch-sisa').innerText = sisa.toLocaleString();
-        document.getElementById('target-pct-txt').innerText = ratio + "%"; document.getElementById('target-bar').style.width = ratio + "%";
+        const elChartPct = document.getElementById('chart-pct'); if (elChartPct) elChartPct.innerText = ratio + "%"; 
+        const elChTot = document.getElementById('ch-tot');       if (elChTot) elChTot.innerText = total.toLocaleString();
+        const elChComp = document.getElementById('ch-comp');     if (elChComp) elChComp.innerText = comp.toLocaleString(); 
+        const elChSisa = document.getElementById('ch-sisa');     if (elChSisa) elChSisa.innerText = sisa.toLocaleString();
+        const elTargetTxt = document.getElementById('target-pct-txt'); if (elTargetTxt) elTargetTxt.innerText = ratio + "%"; 
+        const elTargetBar = document.getElementById('target-bar');     if (elTargetBar) elTargetBar.style.width = ratio + "%";
 
-        const ctx = document.getElementById('donutChart').getContext('2d');
+        const canvasEl = document.getElementById('donutChart');
+        if (!canvasEl) return;
+        const ctx = canvasEl.getContext('2d');
         if (donutChartInstance) donutChartInstance.destroy();
         donutChartInstance = new Chart(ctx, { type: 'doughnut', data: { labels: ['Completed', 'Sisa'], datasets: [{ data: [comp, sisa], backgroundColor: ['#2563eb', '#eff6ff'], borderWidth: 0, hoverOffset: 4 }] }, options: { cutout: '80%', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: true } } } });
     }
@@ -310,6 +458,8 @@
     }
 
     function renderMap(mapPoints) {
+        const mapEl = document.getElementById('map');
+        if (!mapEl) return;
         if (!mapInstance) {
             mapInstance = L.map('map', {zoomControl: false}).setView([-7.2756, 112.7759], 12);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: 'OSM', subdomains: 'abcd', maxZoom: 19 }).addTo(mapInstance);
@@ -317,7 +467,8 @@
         mapInstance.eachLayer((layer) => { if (layer instanceof L.Marker && !layer._url) mapInstance.removeLayer(layer); });
 
         geocodeQueue = [];
-        document.getElementById('map-geo-indicator').classList.add('hidden');
+        const geoInd = document.getElementById('map-geo-indicator');
+        if(geoInd) geoInd.classList.add('hidden');
 
         mapPoints.forEach(pt => {
             let coords = extractCoords(pt.address);
@@ -338,7 +489,7 @@
         setTimeout(() => { mapInstance.invalidateSize(); }, 300);
 
         if(!isGeocoding && geocodeQueue.length > 0) {
-            document.getElementById('map-geo-indicator').classList.remove('hidden');
+            if(geoInd) geoInd.classList.remove('hidden');
             processGeocodeQueue();
         }
     }
@@ -346,7 +497,8 @@
     async function processGeocodeQueue() {
         if (geocodeQueue.length === 0) { 
             isGeocoding = false; 
-            document.getElementById('map-geo-indicator').classList.add('hidden');
+            const geoInd = document.getElementById('map-geo-indicator');
+            if(geoInd) geoInd.classList.add('hidden');
             return; 
         }
         
@@ -399,6 +551,12 @@
         if (typeof google === 'undefined') return;
         google.script.run.withSuccessHandler(function(res) { if(res.success) { techniciansCache = res.technicians; populateTechSelectOptions(); } }).getMasterTechnicians();
         google.script.run.withSuccessHandler(function(res) { if(res.success) errorCodesCache = res.errorCodes; }).getMasterErrorCodes();
+        google.script.run.withSuccessHandler(function(res) { 
+            if(res.success && res.users) {
+                usersCache = res.users;
+                populateUserSelectOptions();
+            }
+        }).getAllUsers();
     }
 
     function populateTechSelectOptions(editingTeamName = null) {
@@ -409,6 +567,18 @@
         let availableTechs = techniciansCache.filter(t => !assignedTechs.has(t));
         let opts = `<option value="">-- Pilih --</option>`; availableTechs.forEach(t => { opts += `<option value="${t}">${t}</option>`; });
         mLeader.innerHTML = opts; mMember.innerHTML = opts;
+    }
+
+    function populateUserSelectOptions() {
+        const select = document.getElementById('todo-input-assignee');
+        if(!select) return;
+        let opts = `<option value="">Semua User / Umum</option>`;
+        usersCache.forEach(u => {
+            if (u.status === 'active') {
+                opts += `<option value="${u.nama}">${u.nama} (${u.role})</option>`;
+            }
+        });
+        select.innerHTML = opts;
     }
 
     function loadMappingTimData() {
@@ -520,48 +690,417 @@
         }).verifyOTP(tempUser, otp);
     }
 
-    function toggleSubMenu(id) { const submenu = document.getElementById(id); const arrow = document.getElementById('arrow-workorder'); submenu.classList.toggle('hidden'); if (arrow) arrow.classList.toggle('rotate-180'); }
+    function toggleSubMenu(id) { 
+        const submenu = document.getElementById(id); 
+        const arrowId = id.replace('submenu', 'arrow');
+        const arrow = document.getElementById(arrowId); 
+        if(submenu) submenu.classList.toggle('hidden'); 
+        if(arrow) arrow.classList.toggle('rotate-180'); 
+    }
 
     function switchMenu(menuName) {
-        ['dashboard', 'daily-report', 'order-hi', 'daily-order', 'order-kendala', 'order-completed', 'data-kendala', 'board-kendala', 'update-data', 'manage-user', 'mapping-tim'].forEach(m => {
+        // DAFTAR MENU LENGKAP TERBARU
+        const menus = [
+            'dashboard-b2c', 'dashboard-prov-b2c', 'dashboard-sqm', 
+            'daily-report', 'daily-order', 'order-hi', 'order-kendala', 'order-completed', 'data-kendala', 'board-kendala', 
+            'todo-list', 'usulan-qe', 'update-data', 
+            'mapping-tim', 'manage-user', 'data-naker', 
+            'user-profile'
+        ];
+        
+        menus.forEach(m => {
             const el = document.getElementById('menu-' + m);
             if(el) { el.classList.remove('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); el.classList.add('text-gray-600', 'font-medium'); }
         });
+        
         const activeEl = document.getElementById('menu-' + menuName);
-        if(activeEl) { activeEl.classList.remove('text-gray-600', 'font-medium'); activeEl.classList.add('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); }
+        if(activeEl) { 
+            activeEl.classList.remove('text-gray-600', 'font-medium'); 
+            activeEl.classList.add('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); 
+        }
 
-        ['dashboard', 'daily-report', 'daily-order', 'mapping-tim', 'manage-user', 'update-data', 'data-kendala', 'board-kendala'].forEach(view => { 
+        // DAFTAR WRAPPER VIEW TERBARU
+        const views = ['dashboard', 'daily-report', 'todo-list', 'usulan-qe', 'daily-order', 'mapping-tim', 'manage-user', 'data-naker', 'update-data', 'data-kendala', 'board-kendala', 'user-profile'];
+        views.forEach(view => { 
             const wrapper = document.getElementById('view-wrapper-' + view); 
             if(wrapper) wrapper.classList.add('hidden'); 
         });
 
-        if(menuName === 'dashboard') {
-            document.getElementById('view-wrapper-dashboard').classList.remove('hidden');
+        if(menuName === 'dashboard-b2c' || menuName === 'dashboard-prov-b2c' || menuName === 'dashboard-sqm') {
+            const dashWrapper = document.getElementById('view-wrapper-dashboard');
+            if(dashWrapper) dashWrapper.classList.remove('hidden');
+            const titleEl = document.getElementById('dashboard-empty-title');
+            if(titleEl) {
+                if(menuName === 'dashboard-b2c') titleEl.innerText = "Dasboard KPI Ass B2C (Menunggu Penyusunan)";
+                else if(menuName === 'dashboard-prov-b2c') titleEl.innerText = "Dasboard KPI Prov B2C (Menunggu Penyusunan)";
+                else if(menuName === 'dashboard-sqm') titleEl.innerText = "Dasboard Result SQM (Menunggu Penyusunan)";
+            }
+            if(menuName === 'dashboard-b2c' || menuName === 'dashboard-sqm') {
+                loadKpiDashboard(menuName);
+            }
         }
         else if(menuName === 'daily-report') { 
             currentActiveMode = 'daily-report';
-            document.getElementById('view-wrapper-daily-report').classList.remove('hidden'); loadDashboardData(); 
+            const wr = document.getElementById('view-wrapper-daily-report');
+            if(wr) wr.classList.remove('hidden'); 
+            loadDashboardData(); 
+        }
+        else if(menuName === 'todo-list') {
+            const wr = document.getElementById('view-wrapper-todo-list');
+            if(wr) wr.classList.remove('hidden');
+            loadToDoData();
+        }
+        else if(menuName === 'usulan-qe') {
+            const wr = document.getElementById('view-wrapper-usulan-qe');
+            if(wr) wr.classList.remove('hidden');
+        }
+        else if(menuName === 'update-data') { 
+            const wr = document.getElementById('view-wrapper-update-data');
+            if(wr) wr.classList.remove('hidden'); 
+            loadRecentImports(); 
         } 
-        else if(menuName === 'update-data') { document.getElementById('view-wrapper-update-data').classList.remove('hidden'); loadRecentImports(); } 
-        else if(menuName === 'mapping-tim') { document.getElementById('view-wrapper-mapping-tim').classList.remove('hidden'); } 
-        else if(menuName === 'manage-user') { const w = document.getElementById('view-wrapper-manage-user'); if(w) w.classList.remove('hidden'); loadUserManagementData(); } 
+        else if(menuName === 'mapping-tim') { 
+            const wr = document.getElementById('view-wrapper-mapping-tim');
+            if(wr) wr.classList.remove('hidden'); 
+        } 
+        else if(menuName === 'manage-user') { 
+            const w = document.getElementById('view-wrapper-manage-user'); 
+            if(w) w.classList.remove('hidden'); 
+            loadUserManagementData(); 
+        } 
+        else if(menuName === 'data-naker') {
+            const wr = document.getElementById('view-wrapper-data-naker');
+            if(wr) wr.classList.remove('hidden');
+        }
         else if(menuName === 'data-kendala') { 
             currentActiveMode = 'data-kendala';
-            document.getElementById('view-wrapper-data-kendala').classList.remove('hidden'); 
+            const wr = document.getElementById('view-wrapper-data-kendala');
+            if(wr) wr.classList.remove('hidden'); 
             loadDataKendala(); 
         }
-        else if(menuName === 'board-kendala') { document.getElementById('view-wrapper-board-kendala').classList.remove('hidden'); }
+        else if(menuName === 'board-kendala') { 
+            const wr = document.getElementById('view-wrapper-board-kendala');
+            if(wr) wr.classList.remove('hidden'); 
+        }
+        else if(menuName === 'user-profile') {
+            const w = document.getElementById('view-wrapper-user-profile');
+            if(w) {
+                w.classList.remove('hidden');
+                const uName = localStorage.getItem("sym_pro_user") || "Pengguna";
+                const uRole = localStorage.getItem("sym_pro_role") || "user";
+                document.getElementById('profile-display-name').innerText = uName;
+                document.getElementById('profile-display-role').innerText = "Role: " + uRole.toUpperCase();
+            }
+        }
         else if(menuName === 'daily-order' || menuName === 'order-hi' || menuName === 'order-kendala' || menuName === 'order-completed') {
-            currentActiveMode = menuName; document.getElementById('view-wrapper-daily-order').classList.remove('hidden');
+            currentActiveMode = menuName; 
+            const wr = document.getElementById('view-wrapper-daily-order');
+            if(wr) wr.classList.remove('hidden');
             let titleHtml = `<i class="fa-solid fa-list-check text-[#0d55d4] mr-2"></i> `;
-            if(menuName === 'daily-order') titleHtml += "Inbox Assign"; else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; else if(menuName === 'order-kendala') titleHtml += "Inbox Kendala"; else if(menuName === 'order-completed') titleHtml += "List Order Completed";
-            document.getElementById('view-title').innerHTML = titleHtml; loadActiveOrderData();
+            if(menuName === 'daily-order') titleHtml += "Inbox Assign"; 
+            else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; 
+            else if(menuName === 'order-kendala') titleHtml += "Inbox Kendala"; 
+            else if(menuName === 'order-completed') titleHtml += "List Order Completed";
+            const elTitle = document.getElementById('view-title');
+            if(elTitle) elTitle.innerHTML = titleHtml; 
+            loadActiveOrderData();
         }
     }
 
-    /* === FUNGSI BARU UNTUK TABEL DATA KENDALA === */
+    /* === FUNGSI MODAL SQM & IMBAL JASA === */
+    function openImbalJasaModal() {
+        const modal = document.getElementById('imbal-jasa-modal');
+        if(modal) modal.classList.remove('hidden');
+        const bodyEl = document.getElementById('sqm-modal-body');
+        if(bodyEl) bodyEl.innerHTML = '<tr><td class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Menarik data dari Spreadsheet...</td></tr>';
+        
+        if (typeof google !== 'undefined') {
+            google.script.run.withSuccessHandler(function(res) {
+                if(res && res.success) {
+                    renderSqmModalTable(res.data);
+                } else {
+                    if(bodyEl) bodyEl.innerHTML = `<tr><td class="text-center py-6 text-red-500">${res.message || 'Gagal memuat data.'}</td></tr>`;
+                }
+            }).getSqmModalData();
+        }
+    }
+    
+    function closeImbalJasaModal() {
+        const modal = document.getElementById('imbal-jasa-modal');
+        if(modal) modal.classList.add('hidden');
+    }
+
+    function renderSqmModalTable(data) {
+        const bodyEl = document.getElementById('sqm-modal-body');
+        if (!data || data.length === 0) {
+            if(bodyEl) bodyEl.innerHTML = '<tr><td class="text-center py-6 text-gray-400">Data kosong</td></tr>';
+            return;
+        }
+
+        let head = '<tr>';
+        data[0].forEach(h => head += `<th class="bg-[#0f766e] text-white p-2">${h}</th>`);
+        head += '</tr>';
+        const headEl = document.getElementById('sqm-modal-head');
+        if(headEl) headEl.innerHTML = head;
+        
+        let body = '';
+        for(let i=1; i<data.length; i++) {
+            body += '<tr class="border-b border-gray-200 hover:bg-gray-50">';
+            data[i].forEach(col => body += `<td class="p-2">${col}</td>`);
+            body += '</tr>';
+        }
+        if(bodyEl) bodyEl.innerHTML = body;
+    }
+
+    /* === FUNGSI TO DO LIST DENGAN DATABASE === */
+    function loadToDoData(isSilent = false) {
+        if (!isSilent) {
+            const lEl = document.getElementById('todo-loading');
+            if(lEl) lEl.classList.remove('hidden');
+            const dCont = document.getElementById('notion-daily-container');
+            const wCont = document.getElementById('notion-weekly-container');
+            if(dCont) dCont.innerHTML = '';
+            if(wCont) wCont.innerHTML = '';
+        }
+        
+        if (typeof google === 'undefined') return;
+        
+        google.script.run
+        .withSuccessHandler(function(res) {
+            if (!isSilent) {
+                const lEl = document.getElementById('todo-loading');
+                if(lEl) lEl.classList.add('hidden');
+            }
+            if(res.success) {
+                dbTodoTasks = res.data || [];
+                renderToDoList();
+            } else {
+                showMessage("Gagal memuat tugas: " + res.message, "error");
+            }
+        })
+        .withFailureHandler(function(err) {
+            if (!isSilent) {
+                const lEl = document.getElementById('todo-loading');
+                if(lEl) lEl.classList.add('hidden');
+            }
+            showMessage("Sistem Error: " + err.message, "error");
+        })
+        .getToDoList();
+    }
+
+    function renderToDoList() {
+        const dailyContainer = document.getElementById('notion-daily-container');
+        const weeklyContainer = document.getElementById('notion-weekly-container');
+        if(!dailyContainer || !weeklyContainer) return;
+
+        const myName = localStorage.getItem("sym_pro_user") || "";
+        const myRole = localStorage.getItem("sym_pro_role") || "user";
+        
+        let visibleTasks = dbTodoTasks;
+        if (myRole.toLowerCase() !== 'superadmin') {
+            visibleTasks = dbTodoTasks.filter(t => t.assignee === myName || t.assignee === "" || !t.assignee);
+        }
+
+        const dailyTasks = visibleTasks.filter(t => t.type === 'Daily');
+        const weeklyTasks = visibleTasks.filter(t => t.type === 'Weekly');
+        
+        let dCompleted = 0; let wCompleted = 0;
+
+        let dailyHtml = generateNotionRowsHtml(dailyTasks, 'Daily');
+        dailyContainer.innerHTML = dailyHtml.html;
+        dCompleted = dailyHtml.completed;
+
+        let weeklyHtml = generateNotionRowsHtml(weeklyTasks, 'Weekly');
+        weeklyContainer.innerHTML = weeklyHtml.html;
+        wCompleted = weeklyHtml.completed;
+
+        const totalTasks = dailyTasks.length + weeklyTasks.length;
+        const totalCompleted = dCompleted + wCompleted;
+        const pct = totalTasks === 0 ? 0 : Math.round((totalCompleted / totalTasks) * 100);
+        const pTxt = document.getElementById('todo-progress-text');
+        const pBar = document.getElementById('todo-progress-bar');
+        if(pTxt) pTxt.innerText = `${pct}% completed overall`;
+        if(pBar) pBar.style.width = `${pct}%`;
+        
+        const wGoal = document.getElementById('weekly-goal-text');
+        if(wGoal) wGoal.innerText = `${wCompleted} / 5`;
+    }
+
+    function generateNotionRowsHtml(tasksArray, type) {
+        if (tasksArray.length === 0) return { html: `<div class="p-4 text-center text-xs text-gray-400 italic">Belum ada task ${type}.</div>`, completed: 0 };
+        
+        let html = ''; let completedCount = 0;
+        
+        const grouped = {
+            'To Do': tasksArray.filter(t => t.status === 'To Do'),
+            'In Progress': tasksArray.filter(t => t.status === 'In Progress'),
+            'Done': tasksArray.filter(t => t.status === 'Done')
+        };
+
+        Object.keys(grouped).forEach(statusGroup => {
+            const tasksInGroup = grouped[statusGroup];
+            if(tasksInGroup.length === 0) return;
+            
+            let groupIcon = '<i class="fa-regular fa-circle text-gray-400"></i>';
+            if (statusGroup === 'In Progress') groupIcon = '<i class="fa-solid fa-circle-half-stroke text-blue-500"></i>';
+            if (statusGroup === 'Done') groupIcon = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+
+            html += `<div class="mb-4">
+                <div class="flex items-center gap-2 mb-1 px-2 text-xs font-bold text-gray-600">
+                    <span class="flex items-center gap-1.5 px-2 py-0.5 rounded bg-gray-50 border border-gray-100">${groupIcon} ${statusGroup} <span class="text-gray-400 ml-1">${tasksInGroup.length}</span></span>
+                </div>`;
+
+            tasksInGroup.forEach(task => {
+                const isChecked = task.status === 'Done';
+                if(isChecked) completedCount++;
+                const checkClass = isChecked ? 'checked' : '';
+                const textClass = isChecked ? 'completed' : 'text-gray-800 font-medium';
+                
+                let priorityClass = 'tag-default';
+                if(task.priority === 'High') priorityClass = 'tag-red';
+                else if(task.priority === 'Medium') priorityClass = 'tag-yellow';
+                else if(task.priority === 'Low') priorityClass = 'tag-blue';
+                
+                let assignText = task.assignee || "Umum";
+
+                html += `
+                    <div class="notion-row flex items-center px-4 py-2.5 text-[11px]">
+                        <!-- Checkbox & Title -->
+                        <div class="flex items-center gap-3 flex-1 min-w-[200px]">
+                            <div class="notion-checkbox ${checkClass} shrink-0" onclick="toggleTaskStatus('${task.id}', '${task.status}', ${task.originalIndex})"></div>
+                            <span class="task-title ${textClass} select-none cursor-pointer flex-1 py-0.5 leading-tight hover:underline" onclick="openTaskModal('${task.id}')">${task.title}</span>
+                        </div>
+                        
+                        <!-- Properties -->
+                        <div class="w-32 hidden md:flex items-center gap-1.5 text-gray-500">
+                            <div class="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-600"><i class="fa-regular fa-user"></i></div>
+                            <span class="truncate">${assignText}</span>
+                        </div>
+                        
+                        <div class="w-28 hidden sm:block">
+                            <span class="notion-tag tag-default cursor-pointer hover:bg-gray-200" onclick="openTaskModal('${task.id}')"><i class="fa-regular fa-circle-dot"></i> ${task.status}</span>
+                        </div>
+                        
+                        <div class="w-28 hidden sm:block">
+                            <span class="notion-tag ${priorityClass}">${task.priority}</span>
+                        </div>
+
+                        <div class="w-32 text-right text-gray-400 font-medium whitespace-nowrap">
+                            ${task.time || '-'}
+                        </div>
+                    </div>
+                `;
+            });
+            html += `</div>`;
+        });
+        return { html: html, completed: completedCount };
+    }
+
+    function toggleTaskStatus(taskId, currentStatus, rowIdx) {
+        let newStatus = currentStatus === 'Done' ? 'To Do' : 'Done';
+        
+        const taskIndex = dbTodoTasks.findIndex(t => t.id === taskId);
+        if (taskIndex !== -1) {
+            dbTodoTasks[taskIndex].status = newStatus;
+            renderToDoList();
+        }
+        
+        if(typeof google !== 'undefined') {
+            google.script.run.saveOrUpdateToDo({
+                action: 'toggle',
+                originalIndex: rowIdx,
+                status: newStatus
+            });
+        }
+    }
+
+    function openTaskModal(taskId = null) {
+        document.getElementById('todo-task-modal').classList.remove('hidden');
+        
+        if (taskId) {
+            document.getElementById('todo-modal-title').innerHTML = '<i class="fa-solid fa-pen text-[#0d55d4] mr-1"></i> Edit Task';
+            const task = dbTodoTasks.find(t => t.id === taskId);
+            if(task) {
+                document.getElementById('todo-input-id').value = task.id;
+                document.getElementById('todo-input-row').value = task.originalIndex;
+                document.getElementById('todo-input-title').value = task.title;
+                document.getElementById('todo-input-type').value = task.type;
+                document.getElementById('todo-input-time').value = task.time;
+                document.getElementById('todo-input-status').value = task.status;
+                document.getElementById('todo-input-priority').value = task.priority;
+                document.getElementById('todo-input-assignee').value = task.assignee;
+            }
+        } else {
+            document.getElementById('todo-modal-title').innerHTML = '<i class="fa-solid fa-plus text-[#0d55d4] mr-1"></i> New Task';
+            document.getElementById('todo-input-id').value = "";
+            document.getElementById('todo-input-row').value = "";
+            document.getElementById('todo-input-title').value = "";
+            document.getElementById('todo-input-type').value = "Daily";
+            document.getElementById('todo-input-time').value = "";
+            document.getElementById('todo-input-status').value = "To Do";
+            document.getElementById('todo-input-priority').value = "Medium";
+            document.getElementById('todo-input-assignee').value = "";
+        }
+    }
+
+    function closeToDoModal() {
+        document.getElementById('todo-task-modal').classList.add('hidden');
+    }
+
+    function saveToDoTask() {
+        const id = document.getElementById('todo-input-id').value;
+        const rowIdx = document.getElementById('todo-input-row').value;
+        const title = document.getElementById('todo-input-title').value;
+        
+        if(!title) { showMessage("Judul task tidak boleh kosong!", "error"); return; }
+        
+        const payload = {
+            action: id ? 'edit' : 'new',
+            id: id,
+            originalIndex: rowIdx,
+            title: title,
+            type: document.getElementById('todo-input-type').value,
+            time: document.getElementById('todo-input-time').value,
+            status: document.getElementById('todo-input-status').value,
+            priority: document.getElementById('todo-input-priority').value,
+            assignee: document.getElementById('todo-input-assignee').value,
+            user: localStorage.getItem("sym_pro_user") || "Unknown"
+        };
+        
+        const btn = document.getElementById('btn-save-todo');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+        btn.disabled = true;
+
+        if (typeof google !== 'undefined') {
+            google.script.run.withSuccessHandler(function(res) {
+                btn.innerHTML = 'Save Task'; btn.disabled = false;
+                if(res.success) {
+                    showMessage(res.message, "success");
+                    closeToDoModal();
+                    
+                    if (payload.action === 'new') {
+                        payload.id = res.newId;
+                        payload.originalIndex = dbTodoTasks.length > 0 ? Math.max(...dbTodoTasks.map(t => t.originalIndex || 0)) + 1 : 2;
+                        dbTodoTasks.push(payload);
+                    } else {
+                        const idx = dbTodoTasks.findIndex(t => String(t.id) === String(payload.id));
+                        if (idx > -1) {
+                            dbTodoTasks[idx] = { ...dbTodoTasks[idx], ...payload };
+                        }
+                    }
+                    renderToDoList(); 
+                    loadToDoData(true); 
+                } else {
+                    showMessage(res.message, "error");
+                }
+            }).saveOrUpdateToDo(payload);
+        }
+    }
+
+    /* === FUNGSI TABEL DATA KENDALA === */
     function loadDataKendala(forceRefresh = false) {
         const tbody = document.getElementById('data-kendala-body'); 
+        if(!tbody) return;
         tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
         
         if (typeof google === 'undefined') return;
@@ -583,7 +1122,8 @@
     function renderTableKendala(rowsToRender) {
         const thead = document.getElementById('data-kendala-head'); 
         const tbody = document.getElementById('data-kendala-body');
-        
+        if(!thead || !tbody) return;
+
         function getColVal(row, colName) {
             let targetClean = colName.toLowerCase(); 
             let idx = kendalaHeaders.findIndex(h => String(h).trim().toLowerCase() === targetClean); 
@@ -598,7 +1138,8 @@
         headHtml += `</tr>`; 
         thead.innerHTML = headHtml;
         
-        document.getElementById('kendala-row-count').innerText = `Menampilkan ${rowsToRender.length} data`;
+        const rCount = document.getElementById('kendala-row-count');
+        if(rCount) rCount.innerText = `Menampilkan ${rowsToRender.length} data`;
         
         if(rowsToRender.length === 0) { 
             tbody.innerHTML = `<tr><td colspan="${KENDALA_COLUMNS.length}" class="text-center py-6 text-gray-400">Belum ada data kendala.</td></tr>`; 
@@ -693,7 +1234,7 @@
     function loadActiveOrderData(forceRefresh = false) {
         const cacheKey = getCacheKeyForMode(currentActiveMode);
         if (!forceRefresh && modeDataCache[cacheKey]) { globalDailyHeaders = modeDataCache[cacheKey].headers || []; globalDailyRows = modeDataCache[cacheKey].rows || []; populateMultiSelectFilters(); applyFilters(); return; }
-        const tbody = document.getElementById('daily-order-body'); tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
+        const tbody = document.getElementById('daily-order-body'); if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-gray-400"><i class="fa-solid fa-spinner fa-spin mr-2"></i> Memuat data...</td></tr>`;
         if (typeof google === 'undefined') return;
         
         if (currentActiveMode === 'order-kendala') {
@@ -703,10 +1244,10 @@
         }
 
         const successHandler = function(res) {
-            if(!res || !res.success) { tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">${res ? res.message : 'Respon kosong'}</td></tr>`; return; }
+            if(!res || !res.success) { if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">${res ? res.message : 'Respon kosong'}</td></tr>`; return; }
             modeDataCache[cacheKey] = { headers: res.headers || [], rows: res.rows || [] }; globalDailyHeaders = modeDataCache[cacheKey].headers; globalDailyRows = modeDataCache[cacheKey].rows; populateMultiSelectFilters(); applyFilters();
         };
-        const failureHandler = function(err) { tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">Error Server: ${err.message}</td></tr>`; };
+        const failureHandler = function(err) { if(tbody) tbody.innerHTML = `<tr><td colspan="12" class="text-center py-6 text-red-500 font-semibold">Error Server: ${err.message}</td></tr>`; };
         if (currentActiveMode === 'order-kendala') google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getOrderKendalaData(); else if (currentActiveMode === 'order-completed') google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getOrderCompletedData(); else google.script.run.withSuccessHandler(successHandler).withFailureHandler(failureHandler).getDailyOrderData();
     }
 
@@ -732,12 +1273,9 @@
         if(!globalDailyHeaders || globalDailyHeaders.length === 0) return;
         let crmTypeIdx = -1, jenisErrorIdx = -1, errorcodeIdx = -1, suberrorcodeIdx = -1;
         globalDailyHeaders.forEach((h, idx) => { let hClean = String(h).trim().toLowerCase(); if(hClean === 'crm order type') crmTypeIdx = idx; if(hClean === 'jenis_error') jenisErrorIdx = idx; if(hClean === 'errorcode') errorcodeIdx = idx; if(hClean === 'suberrorcode') suberrorcodeIdx = idx; });
-        const crmContent = document.getElementById('content-crm'); crmContent.innerHTML = "";
-        if(crmTypeIdx !== -1) { let uniqueCrm = [...new Set(globalDailyRows.map(r => String(r[crmTypeIdx] || "").trim()))].filter(v => v !== ""); uniqueCrm.sort().forEach(val => { crmContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-crm" onchange="updateDropdownLabel('crm')"><span>${val}</span></label>`; }); } updateDropdownLabel('crm');
-        const jenisContent = document.getElementById('content-jenis'); jenisContent.innerHTML = "";
-        if(jenisErrorIdx !== -1) { let uniqueJenis = [...new Set(globalDailyRows.map(r => String(r[jenisErrorIdx] || "").trim()))].filter(v => v !== ""); uniqueJenis.sort().forEach(val => { jenisContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-jenis" onchange="updateDropdownLabel('jenis')"><span>${val}</span></label>`; }); } updateDropdownLabel('jenis');
-        const errContent = document.getElementById('content-errorcode'); errContent.innerHTML = "";
-        if(errorcodeIdx !== -1) { let uniqueErr = [...new Set(globalDailyRows.map(r => String(r[errorcodeIdx] || "").trim()))].filter(v => v !== ""); uniqueErr.sort().forEach(val => { errContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-errorcode" onchange="onErrorCodeFilterChange()"><span>${val}</span></label>`; }); } updateDropdownLabel('errorcode');
+        const crmContent = document.getElementById('content-crm'); if(crmContent) { crmContent.innerHTML = ""; if(crmTypeIdx !== -1) { let uniqueCrm = [...new Set(globalDailyRows.map(r => String(r[crmTypeIdx] || "").trim()))].filter(v => v !== ""); uniqueCrm.sort().forEach(val => { crmContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-crm" onchange="updateDropdownLabel('crm')"><span>${val}</span></label>`; }); } } updateDropdownLabel('crm');
+        const jenisContent = document.getElementById('content-jenis'); if(jenisContent) { jenisContent.innerHTML = ""; if(jenisErrorIdx !== -1) { let uniqueJenis = [...new Set(globalDailyRows.map(r => String(r[jenisErrorIdx] || "").trim()))].filter(v => v !== ""); uniqueJenis.sort().forEach(val => { jenisContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-jenis" onchange="updateDropdownLabel('jenis')"><span>${val}</span></label>`; }); } } updateDropdownLabel('jenis');
+        const errContent = document.getElementById('content-errorcode'); if(errContent) { errContent.innerHTML = ""; if(errorcodeIdx !== -1) { let uniqueErr = [...new Set(globalDailyRows.map(r => String(r[errorcodeIdx] || "").trim()))].filter(v => v !== ""); uniqueErr.sort().forEach(val => { errContent.innerHTML += `<label class="multiselect-item"><input type="checkbox" value="${val}" class="custom-checkbox cb-errorcode" onchange="onErrorCodeFilterChange()"><span>${val}</span></label>`; }); } } updateDropdownLabel('errorcode');
         updateSubErrorCodeOptions();
     }
 
@@ -847,7 +1385,8 @@
     function renderTablePaginated() {
         const thead = document.getElementById('daily-order-head'); 
         const tbody = document.getElementById('daily-order-body');
-        
+        if(!thead || !tbody) return;
+
         function getColVal(row, colName) {
             if (colName === "Order ID TSEL") { 
                 let idx = globalDailyHeaders.findIndex(h => String(h).trim().toLowerCase() === "order id tsel"); 
@@ -887,7 +1426,8 @@
         
         const paginatedRows = validRows.slice(startIndex, endIndex);
 
-        document.getElementById('table-row-count').innerText = totalData === 0 ? "Menampilkan 0 data" : `Menampilkan ${startIndex + 1} - ${endIndex} dari ${totalData} data`;
+        const elCount = document.getElementById('table-row-count');
+        if(elCount) elCount.innerText = totalData === 0 ? "Menampilkan 0 data" : `Menampilkan ${startIndex + 1} - ${endIndex} dari ${totalData} data`;
         
         const btnPrev = document.getElementById('btn-prev-page');
         const btnNext = document.getElementById('btn-next-page');
@@ -1018,7 +1558,6 @@
         processFollowUpAction('Follow Up Revoke / UNSC');
     }
 
-    // FUNGSI BARU UNTUK PROSES KE BACKEND
     function processFollowUpAction(statusText) {
         document.getElementById('follow-up-menu').classList.add('hidden');
         
@@ -1037,7 +1576,7 @@
 
         const trackIdVal = getVal("Order ID TSEL");
         const woVal = getVal("Workorder");
-        const rowKey = trackIdVal || woVal; // Gunakan ID sebagai Key
+        const rowKey = trackIdVal || woVal; 
 
         const payload = {
             sheetName: currentActiveMode === 'order-kendala' ? 'Order Kendala' : 'List Daily Order',
@@ -1055,10 +1594,8 @@
                 showMessage("Berhasil: " + statusText, "success");
                 closeDetailModal();
                 
-                // Simpan state ke ID Unik
                 window.followedUpOrders[rowKey] = statusText;
                 
-                // Render ulang tabel
                 renderTablePaginated(); 
 
                 if (statusText === 'Follow Up Revoke / UNSC') {
