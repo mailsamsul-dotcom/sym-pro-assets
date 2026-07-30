@@ -1,0 +1,117 @@
+// Report.gs
+function getRecentImports() {
+  try {
+    // Menggunakan getConfig untuk mengambil ID Spreadsheet secara dinamis
+    const ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    let sheet = ss.getSheetByName("Import History");
+    if (!sheet) {
+      sheet = ss.insertSheet("Import History");
+      sheet.appendRow(["Timestamp", "File Name", "Type", "Status", "Uploader"]);
+      return [];
+    }
+    
+    const data = sheet.getDataRange().getValues();
+    if (data.length <= 1) return [];
+    
+    let history = [];
+    for (let i = data.length - 1; i >= 1; i--) {
+      if (data[i][1]) {
+        history.push({
+          timestamp: data[i][0] instanceof Date ? data[i][0].toLocaleString('id-ID') : String(data[i][0]),
+          file: String(data[i][1]),
+          type: String(data[i][2]),
+          status: String(data[i][3]),
+          by: String(data[i][4])
+        });
+      }
+      if (history.length >= 10) break;
+    }
+    return history;
+  } catch(e) {
+    return [];
+  }
+}
+
+function importExcelData(rowsArray, dataType, uploader, fileName) { 
+  try {
+    // Menggunakan getConfig untuk mengambil ID Spreadsheet secara dinamis
+    const ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    let sheet = ss.getSheetByName("Update Data");
+    if (!sheet) {
+      sheet = ss.insertSheet("Update Data");
+    }
+    
+    if (rowsArray.length <= 1) {
+      return { success: false, message: "File Excel kosong atau tidak memiliki data baris." };
+    }
+
+    const newHeaders = rowsArray[0].map(h => String(h).trim().toLowerCase());
+    
+    let trackIdIdxNew = newHeaders.findIndex(h => 
+      h.includes('sc order no') || h.includes('csrm') || h.includes('order id tsel')
+    );
+    
+    const existingData = sheet.getDataRange().getValues();
+    let existingHeaders = [];
+    let existingRows = [];
+    
+    if (existingData.length > 0) {
+      existingHeaders = existingData[0].map(h => String(h).trim().toLowerCase());
+      existingRows = existingData.slice(1);
+    } else {
+      sheet.getRange(1, 1, 1, rowsArray[0].length).setValues([rowsArray[0]]);
+      existingHeaders = newHeaders;
+    }
+
+    let trackIdIdxOld = existingHeaders.findIndex(h => 
+      h.includes('sc order no') || h.includes('csrm') || h.includes('order id tsel')
+    );
+
+    let rowMap = new Map();
+    if (trackIdIdxOld !== -1) {
+      existingRows.forEach(row => {
+        let tVal = String(row[trackIdIdxOld] || "").trim();
+        if (tVal) rowMap.set(tVal, row);
+      });
+    }
+
+    let newRows = rowsArray.slice(1);
+    let addedCount = 0;
+    let replacedCount = 0;
+
+    newRows.forEach(newRow => {
+      let tNew = trackIdIdxNew !== -1 ? String(newRow[trackIdIdxNew] || "").trim() : "";
+      if (tNew && rowMap.has(tNew)) {
+        rowMap.set(tNew, newRow);
+        replacedCount++;
+      } else if (tNew) {
+        rowMap.set(tNew, newRow);
+        addedCount++;
+      } else {
+        existingRows.push(newRow);
+        addedCount++;
+      }
+    });
+
+    let finalRows = Array.from(rowMap.values());
+    
+    sheet.clearContents();
+    let finalDataToSet = [rowsArray[0], ...finalRows];
+    sheet.getRange(1, 1, finalDataToSet.length, finalDataToSet[0].length).setValues(finalDataToSet);
+
+    let historySheet = ss.getSheetByName("Import History");
+    if (!historySheet) {
+      historySheet = ss.insertSheet("Import History");
+      historySheet.appendRow(["Timestamp", "File Name", "Type", "Status", "Uploader"]);
+    }
+    let nowStr = new Date().toLocaleString('id-ID');
+    historySheet.appendRow([nowStr, fileName, dataType, "Success", uploader]);
+
+    return { 
+      success: true, 
+      message: `Data berhasil di-import ke sheet 'Update Data'! (${addedCount} baru, ${replacedCount} ter-update karena duplikat).` 
+    };
+  } catch(e) {
+    return { success: false, message: "Gagal import: " + e.message };
+  }
+}
