@@ -1,0 +1,332 @@
+function updateDailyOrderData(payload) {
+  try {
+    const targetSheetName = payload.sheetName || "List Daily Order";
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID')).getSheetByName(targetSheetName);
+    if (!sheet) return { success: false, message: "Sheet '" + targetSheetName + "' tidak ditemukan." };
+
+    const data = sheet.getDataRange().getValues();
+    const headers = data[0].map(h => String(h).trim().toLowerCase());
+    
+    let targetRowIdx = -1;
+    let woCol = headers.findIndex(h => h.includes('workorder'));
+    let trCol = headers.findIndex(h => h === 'order id tsel');
+    if (trCol === -1) {
+      trCol = headers.findIndex(h => h.includes('sc order no') || h.includes('csrm'));
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      let wVal = woCol !== -1 ? String(data[i][woCol]).trim() : "";
+      let tVal = trCol !== -1 ? String(data[i][trCol]).trim() : "";
+      if ((payload.oldWorkorder && wVal === payload.oldWorkorder) || (payload.oldTrackId && tVal === payload.oldTrackId) || (payload.workorder && wVal === payload.workorder)) {
+        targetRowIdx = i + 1;
+        break;
+      }
+    }
+
+    if (targetRowIdx === -1) return { success: false, message: "Order tidak ditemukan di Sheet " + targetSheetName };
+
+    const updateMap = {
+      "crm order type": payload.crmOrderType,
+      "workorder": payload.workorder,
+      "order id tsel": payload.trackId,
+      "sc order no/track id/csrm no": payload.trackId,
+      "service no.": payload.serviceNo,
+      "package_info": payload.packageInfo,
+      "leader": payload.leader,
+      "member": payload.member,
+      "errorcode": payload.errorCode,
+      "suberrorcode": payload.subErrorCode,
+      "engineermemo (sa)": payload.engineerMemo
+    };
+
+    if (payload.action === 'assign' && payload.assignTime) {
+      updateMap["assign date"] = payload.assignTime;
+      updateMap["waktu assign"] = payload.assignTime;
+      updateMap["assigned date"] = payload.assignTime;
+    }
+
+    for (let colName in updateMap) {
+      if (updateMap[colName] !== undefined && updateMap[colName] !== null) {
+        let idx = headers.findIndex(h => h === colName || h === colName.toLowerCase());
+        if (idx !== -1) {
+          sheet.getRange(targetRowIdx, idx + 1).setValue(updateMap[colName]);
+        }
+      }
+    }
+
+    if (payload.action === 'assign') {
+      let orderData = {
+        custName: payload.customerName, // Sekarang mengambil dari payload yang sudah diupdate
+        address: payload.address,
+        contact: payload.contactNumber,
+        type: payload.crmOrderType,
+        wo: payload.workorder,
+        trackId: payload.trackId,
+        serviceNo: payload.serviceNo,
+        pkgInfo: payload.packageInfo,
+        created: payload.dateCreated,
+        booking: payload.bookingDate,
+        leader: payload.leader,
+        member: payload.member
+      };
+      
+      sendTelegramNotification(orderData, payload.timName);
+    }
+
+    return { success: true, message: "Data Berhasil disimpan!" };
+  } catch(e) {
+    return { success: false, message: "Gagal update: " + e.message };
+  }
+}
+
+function syncNewOrdersFromUpdateData() {
+  try {
+    var ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    
+    var sourceSheet = ss.getSheetByName("Update Data");
+    var destSheet = ss.getSheetByName("List Daily Order");
+    var sheetKendala = ss.getSheetByName("Order Kendala");
+    var sheetCompleted = ss.getSheetByName("Order Completed");
+    
+    if (!sourceSheet || !destSheet) {
+      return { success: false, message: "Sheet 'Update Data' atau 'List Daily Order' tidak ditemukan!" };
+    }
+    
+    var KEY_NAMES = ["SC Order No/Track ID/CSRM No", "Order ID TSEL"];
+    var destLastCol = destSheet.getLastColumn() || 10;
+    var destHeaders = destSheet.getRange(1, 1, 1, destLastCol).getValues()[0];
+    
+    var destKeyIndex = -1;
+    for (var h = 0; h < destHeaders.length; h++) {
+      var hStr = String(destHeaders[h]).trim().toLowerCase();
+      if (hStr.includes("sc order no") || hStr.includes("csrm") || hStr.includes("order id tsel")) {
+        destKeyIndex = h + 1;
+        break;
+      }
+    }
+    if (destKeyIndex === -1) destKeyIndex = 4;
+
+    var destLastRow = 0;
+    var maxDestRows = destSheet.getLastRow();
+    if (maxDestRows >= 1) {
+      var checkRange = destSheet.getRange(1, destKeyIndex, maxDestRows, 1).getValues();
+      for (var i = checkRange.length - 1; i >= 0; i--) {
+        var valKeyCheck = String(checkRange[i][0]).trim();
+        if (valKeyCheck !== "" && !KEY_NAMES.some(k => k.toLowerCase() === valKeyCheck.toLowerCase())) {
+          destLastRow = i + 1;
+          break;
+        }
+      }
+    }
+    if (destLastRow === 0) destLastRow = 1;
+
+    var existingKeys = {};
+    
+    if (destLastRow >= 2) {
+      var destKeys = destSheet.getRange(2, destKeyIndex, destLastRow - 1, 1).getValues();
+      for (var k = 0; k < destKeys.length; k++) {
+        var kVal = String(destKeys[k][0]).trim();
+        if (kVal && !KEY_NAMES.some(kn => kn.toLowerCase() === kVal.toLowerCase())) {
+          existingKeys[kVal] = true;
+        }
+      }
+    }
+    
+    if (sheetKendala && sheetKendala.getLastRow() >= 2) {
+      var kHeaders = sheetKendala.getRange(1, 1, 1, sheetKendala.getLastColumn()).getValues()[0];
+      var kKeyIdx = -1;
+      for (var kh = 0; kh < kHeaders.length; kh++) {
+        var khStr = String(kHeaders[kh]).trim().toLowerCase();
+        if (khStr.includes("sc order no") || khStr.includes("csrm") || khStr.includes("order id tsel")) {
+          kKeyIdx = kh + 1;
+          break;
+        }
+      }
+      if (kKeyIdx === -1) kKeyIdx = 4;
+      var kendalaKeys = sheetKendala.getRange(2, kKeyIdx, sheetKendala.getLastRow() - 1, 1).getValues();
+      for (var ki = 0; ki < kendalaKeys.length; ki++) {
+        var kValK = String(kendalaKeys[ki][0]).trim();
+        if (kValK && !KEY_NAMES.some(kn => kn.toLowerCase() === kValK.toLowerCase())) {
+          existingKeys[kValK] = true;
+        }
+      }
+    }
+    
+    if (sheetCompleted && sheetCompleted.getLastRow() >= 2) {
+      var cHeaders = sheetCompleted.getRange(1, 1, 1, sheetCompleted.getLastColumn()).getValues()[0];
+      var cKeyIdx = -1;
+      for (var ch = 0; ch < cHeaders.length; ch++) {
+        var chStr = String(cHeaders[ch]).trim().toLowerCase();
+        if (chStr.includes("sc order no") || chStr.includes("csrm") || chStr.includes("order id tsel")) {
+          cKeyIdx = ch + 1;
+          break;
+        }
+      }
+      if (cKeyIdx === -1) cKeyIdx = 4;
+      var completedKeys = sheetCompleted.getRange(2, cKeyIdx, sheetCompleted.getLastRow() - 1, 1).getValues();
+      for (var ci = 0; ci < completedKeys.length; ci++) {
+        var cValC = String(completedKeys[ci][0]).trim();
+        if (cValC && !KEY_NAMES.some(kn => kn.toLowerCase() === cValC.toLowerCase())) {
+          existingKeys[cValC] = true;
+        }
+      }
+    }
+
+    var sourceLastRow = sourceSheet.getLastRow();
+    if (sourceLastRow < 2) {
+      return { success: true, added: 0, message: "Sheet 'Update Data' kosong." };
+    }
+    
+    var sourceHeaders = sourceSheet.getRange(1, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
+    var sourceData = sourceSheet.getRange(2, 1, sourceLastRow - 1, sourceSheet.getLastColumn()).getValues();
+    
+    var sourceKeyIndex = -1;
+    for (var sh = 0; sh < sourceHeaders.length; sh++) {
+      var shStr = String(sourceHeaders[sh]).trim().toLowerCase();
+      if (shStr.includes("sc order no") || shStr.includes("csrm") || shStr.includes("order id tsel")) {
+        sourceKeyIndex = sh;
+        break;
+      }
+    }
+    if (sourceKeyIndex === -1) sourceKeyIndex = destKeyIndex - 1;
+
+    var headerMap = {};
+    destHeaders.forEach(function(header) {
+      var hClean = String(header).trim().toLowerCase();
+      if (hClean !== "") {
+        var foundIdx = -1;
+        for (var s = 0; s < sourceHeaders.length; s++) {
+          var sClean = String(sourceHeaders[s]).trim().toLowerCase();
+          if (sClean === hClean || 
+              ((hClean.includes("order id tsel") || hClean.includes("sc order no")) && 
+               (sClean.includes("order id tsel") || sClean.includes("sc order no") || sClean.includes("csrm")))) {
+            foundIdx = s;
+            break;
+          }
+        }
+        headerMap[header] = foundIdx;
+      }
+    });
+
+    var rowsToAppend = [];
+    
+    for (var j = 0; j < sourceData.length; j++) {
+      var sourceRow = sourceData[j];
+      var keyValue = sourceRow[sourceKeyIndex];
+      
+      if (keyValue === undefined || keyValue === null) continue;
+      var keyString = String(keyValue).trim();
+      
+      if (keyString === "" || KEY_NAMES.some(kn => kn.toLowerCase() === keyString.toLowerCase())) {
+        continue;
+      }
+      
+      if (!existingKeys[keyString]) {
+        var newRow = [];
+        destHeaders.forEach(function(header) {
+          if (String(header).trim() !== "") {
+            var srcIdx = headerMap[header];
+            if (srcIdx !== undefined && srcIdx !== -1 && srcIdx < sourceRow.length) {
+              newRow.push(sourceRow[srcIdx]);
+            } else {
+              newRow.push("");
+            }
+          } else {
+            newRow.push("");
+          }
+        });
+        rowsToAppend.push(newRow);
+        existingKeys[keyString] = true;
+      }
+    }
+
+    if (rowsToAppend.length > 0) {
+      destSheet.getRange(destLastRow + 1, 1, rowsToAppend.length, destHeaders.length).setValues(rowsToAppend);
+      return { success: true, added: rowsToAppend.length, message: `${rowsToAppend.length} order baru berhasil ditambahkan ke List Daily Order!` };
+    } else {
+      return { success: true, added: 0, message: "Semua order sudah sinkron." };
+    }
+  } catch(e) {
+    return { success: false, message: "Gagal sinkronisasi: " + e.message };
+  }
+}
+
+function saveFollowUpData(payload) {
+  try {
+    var ss = SpreadsheetApp.openById(getConfig('SHEET_ID')); 
+    var targetSheet = ss.getSheetByName("Data Kendala");
+    
+    if (!targetSheet) {
+      targetSheet = ss.insertSheet("Data Kendala");
+      var headers = payload.headers.slice();
+      headers.push("Follow Up Status");
+      headers.push("Tanggal Follow Up");
+      targetSheet.appendRow(headers);
+    }
+
+    var data = targetSheet.getDataRange().getValues();
+    var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+    var trackIdx = headers.findIndex(function(h) { return h.includes("sc order no") || h.includes("csrm") || h.includes("order id tsel"); });
+    var woIdx = headers.findIndex(function(h) { return h.includes("workorder"); });
+    
+    var isDuplicate = false;
+    var existingRowIndex = -1;
+    
+    if (data.length > 1) {
+        for (var i = 1; i < data.length; i++) {
+            var tVal = trackIdx !== -1 ? String(data[i][trackIdx]).trim() : "";
+            var wVal = woIdx !== -1 ? String(data[i][woIdx]).trim() : "";
+            if ((payload.trackId && tVal === payload.trackId) || (payload.workorder && wVal === payload.workorder)) {
+                isDuplicate = true;
+                existingRowIndex = i + 1; 
+                break;
+            }
+        }
+    }
+    
+    var newRow = payload.rowData.slice();
+    while(newRow.length < payload.headers.length) { newRow.push(""); }
+    newRow.push(payload.followUpStatus); 
+    newRow.push(new Date().toLocaleString('id-ID')); 
+
+    if (isDuplicate) {
+        targetSheet.getRange(existingRowIndex, 1, 1, newRow.length).setValues([newRow]);
+        return { success: true, message: "Data Follow Up diperbarui (mencegah duplikat)." };
+    } else {
+        targetSheet.appendRow(newRow);
+        return { success: true, message: "Data berhasil dicatat ke Data Kendala." };
+    }
+  } catch(e) {
+    return { success: false, message: "Error System: " + e.message };
+  }
+}
+
+function getFollowedUpList() {
+    try {
+        var ss = SpreadsheetApp.openById(getConfig('SHEET_ID')); 
+        var sheet = ss.getSheetByName("Data Kendala");
+        if (!sheet) return { success: true, data: {} };
+        
+        var data = sheet.getDataRange().getValues();
+        if (data.length <= 1) return { success: true, data: {} };
+        
+        var headers = data[0].map(function(h) { return String(h).trim().toLowerCase(); });
+        var trackIdx = headers.findIndex(function(h) { return h.includes("sc order no") || h.includes("csrm") || h.includes("order id tsel"); });
+        var woIdx = headers.findIndex(function(h) { return h.includes("workorder"); });
+        var statusIdx = headers.findIndex(function(h) { return h === "follow up status"; });
+        
+        var followedUpMap = {};
+        for (var i = 1; i < data.length; i++) {
+            var tVal = trackIdx !== -1 ? String(data[i][trackIdx]).trim() : "";
+            var wVal = woIdx !== -1 ? String(data[i][woIdx]).trim() : "";
+            var key = tVal || wVal; 
+            var status = statusIdx !== -1 ? String(data[i][statusIdx]).trim() : "Followed Up";
+            if (key) {
+                followedUpMap[key] = status;
+            }
+        }
+        return { success: true, data: followedUpMap };
+    } catch(e) {
+        return { success: false, data: {} };
+    }
+}
