@@ -1,0 +1,178 @@
+function getKpiDataByName(sheetName) {
+  try {
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID_KPI')).getSheetByName(sheetName);
+    if (!sheet) return { success: false, message: "Sheet '" + sheetName + "' tidak ditemukan di Spreadsheet KPI." };
+    
+    const data = sheet.getDataRange().getValues();
+    if (!data || data.length <= 1) {
+      const headers = (data && data.length > 0) ? data[0] : [];
+      return { success: true, headers: headers, rows: [] };
+    }
+    
+    const headers = data[0];
+    const rows = data.slice(1);
+    
+    return { success: true, headers: headers, rows: rows };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function getKpiAssB2CData() { return getKpiDataByName("Close Tiket"); }
+function getResultSqmData() { return getKpiDataByName("Close SQM"); }
+
+function getKpiAssB2CSummary() {
+  try {
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID_KPI')).getSheetByName("Dashboard_Cons");
+    if (!sheet) {
+      return { success: false, message: "Sheet 'Dashboard_Cons' tidak ditemukan di Spreadsheet KPI." };
+    }
+    
+    return {
+      success: true,
+      data: {
+        totalList: sheet.getRange("J6").getValue(),
+        sa: {
+          open: sheet.getRange("W6").getValue(),
+          diaFsk: sheet.getRange("X9").getValue(),  diaLgc: sheet.getRange("Y9").getValue(),
+          platFsk: sheet.getRange("X10").getValue(), platLgc: sheet.getRange("Y10").getValue(),
+          goldFsk: sheet.getRange("X11").getValue(), goldLgc: sheet.getRange("Y11").getValue(),
+          regFsk: sheet.getRange("X12").getValue(),  regLgc: sheet.getRange("Y12").getValue(),
+          gamas: sheet.getRange("V15").getValue(),   nongamas: sheet.getRange("Y15").getValue(),
+          real: sheet.getRange("U18").getValue(),   ach: sheet.getRange("X18").getValue()
+        },
+        ag: {
+          open: sheet.getRange("AD6").getValue(),
+          diaFsk: sheet.getRange("AE9").getValue(),  diaLgc: sheet.getRange("AF9").getValue(),
+          platFsk: sheet.getRange("AE10").getValue(), platLgc: sheet.getRange("AF10").getValue(),
+          goldFsk: sheet.getRange("AE11").getValue(), goldLgc: sheet.getRange("AF11").getValue(),
+          regFsk: sheet.getRange("AE12").getValue(),  regLgc: sheet.getRange("AF12").getValue(),
+          gamas: sheet.getRange("AC15").getValue(),   nongamas: sheet.getRange("AF15").getValue(),
+          real: sheet.getRange("AB18").getValue(),   ach: sheet.getRange("AE18").getValue()
+        },
+        ttr1: {
+          open: sheet.getRange("I26").getValue(),   c: sheet.getRange("J29").getValue(),   nc: sheet.getRange("K29").getValue(),
+          gamC: sheet.getRange("J31").getValue(),   gamNc: sheet.getRange("K31").getValue(), gamReal: sheet.getRange("L31").getValue(),
+          nongamC: sheet.getRange("J32").getValue(), nongamNc: sheet.getRange("K32").getValue(), nongamReal: sheet.getRange("L32").getValue(),
+          real: sheet.getRange("G35").getValue(),   ach: sheet.getRange("J35").getValue()
+        },
+        ttr2: {
+          open: sheet.getRange("P26").getValue(),   c: sheet.getRange("Q29").getValue(),   nc: sheet.getRange("R29").getValue(),
+          gamC: sheet.getRange("Q31").getValue(),   gamNc: sheet.getRange("R31").getValue(), gamReal: sheet.getRange("S31").getValue(),
+          nongamC: sheet.getRange("Q32").getValue(), nongamNc: sheet.getRange("R32").getValue(), nongamReal: sheet.getRange("S32").getValue(),
+          real: sheet.getRange("N35").getValue(),   ach: sheet.getRange("Q35").getValue()
+        },
+        ttr3: {
+          open: sheet.getRange("W26").getValue(),   c: sheet.getRange("X29").getValue(),   nc: sheet.getRange("Y29").getValue(),
+          gamC: sheet.getRange("X31").getValue(),   gamNc: sheet.getRange("Y31").getValue(), gamReal: sheet.getRange("Z31").getValue(),
+          nongamC: sheet.getRange("X32").getValue(), nongamNc: sheet.getRange("Y32").getValue(), nongamReal: sheet.getRange("Z32").getValue(),
+          real: sheet.getRange("U35").getValue(),   ach: sheet.getRange("X35").getValue()
+        },
+        ttr4: {
+          open: sheet.getRange("AD26").getValue(),   c: sheet.getRange("AE29").getValue(),   nc: sheet.getRange("AF29").getValue(),
+          gamC: sheet.getRange("AE31").getValue(),   gamNc: sheet.getRange("AF31").getValue(), gamReal: sheet.getRange("AG31").getValue(),
+          nongamC: sheet.getRange("AE32").getValue(), nongamNc: sheet.getRange("AF32").getValue(), nongamReal: sheet.getRange("AG32").getValue(),
+          real: sheet.getRange("AB35").getValue(),   ach: sheet.getRange("AE35").getValue()
+        },
+        ttr5: {
+          open: sheet.getRange("AK26").getValue(),   c: sheet.getRange("AL29").getValue(),   nc: sheet.getRange("AM29").getValue(),
+          gamC: sheet.getRange("AL31").getValue(),   gamNc: sheet.getRange("AM31").getValue(), gamReal: sheet.getRange("AN31").getValue(),
+          nongamC: sheet.getRange("AL32").getValue(), nongamNc: sheet.getRange("AM32").getValue(), nongamReal: sheet.getRange("AN32").getValue(),
+          real: sheet.getRange("AI35").getValue(),   ach: sheet.getRange("AL35").getValue()
+        }
+      }
+    };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
+
+function getKpiProvB2CSummary() {
+  try {
+    const ss = SpreadsheetApp.openById(getConfig('SHEET_ID_KPI'));
+    const sheet = ss.getSheetByName("DB NewSales Kpro");
+    
+    if (!sheet) {
+      return { success: false, message: "Sheet 'DB NewSales Kpro' tidak ditemukan." };
+    }
+    
+    const data = sheet.getDataRange().getDisplayValues();
+    if (data.length <= 1) {
+      return { success: false, message: "Data pada sheet DB NewSales Kpro kosong." };
+    }
+    
+    const headers = data[0].map(h => String(h).trim().toUpperCase());
+    const rows = data.slice(1);
+    
+    const findCol = (...keywords) => {
+      return headers.findIndex(h => keywords.some(k => h === k || h.includes(k)));
+    };
+    
+    const idxStatus     = findCol('STATUS');
+    const idxErrCode    = findCol('ERRORCODE_AKHIR', 'ERRORCODE');
+    const idxPeriodeIn  = findCol('PERIODE_INPUT', 'DATECREATED', 'TANGGAL INPUT');
+    const idxPeriodePS  = findCol('PERIODE_PS', 'TGL_PI_AKHIR', 'STATUSDATE');
+    const idxKetPI      = findCol('KETERANGAN_PI', 'STATUS_SURVEY');
+    const idxTask       = findCol('STATUS_TASK', 'DESC_TASK');
+    
+    const now = new Date();
+    const currentYear = String(now.getFullYear());
+    const currentMonth = String(now.getMonth() + 1).padStart(2, '0');
+    
+    let stats = {
+      transaksiMtd: 0,
+      orderPi: 0,
+      sudahIkr: 0,
+      jumlahPsMtd: 0,
+      kendalaMtd: 0,
+      kendalaYtd: 0,
+      canceledMtd: 0,
+      canceledYtd: 0,
+      totalAll: rows.length
+    };
+    
+    rows.forEach(row => {
+      const status   = idxStatus !== -1 ? String(row[idxStatus] || '').trim().toUpperCase() : '';
+      const errCode  = idxErrCode !== -1 ? String(row[idxErrCode] || '').trim().toUpperCase() : '';
+      const pInput   = idxPeriodeIn !== -1 ? String(row[idxPeriodeIn] || '').trim() : '';
+      const pPS      = idxPeriodePS !== -1 ? String(row[idxPeriodePS] || '').trim() : '';
+      const ketPi    = idxKetPI !== -1 ? String(row[idxKetPI] || '').trim().toUpperCase() : '';
+      const task     = idxTask !== -1 ? String(row[idxTask] || '').trim().toUpperCase() : '';
+      
+      const isYtd = pInput.includes(currentYear) || pPS.includes(currentYear);
+      const isMtd = isYtd && (pInput.includes(`-${currentMonth}-`) || pInput.includes(`/${currentMonth}/`) || pPS.includes(`-${currentMonth}-`) || pPS.includes(`/${currentMonth}/`));
+      
+      if (isMtd || !pInput) {
+        stats.transaksiMtd++;
+      }
+      
+      if (!status.includes('COMPLETED') && !status.includes('PS') && !status.includes('CANCEL') && !status.includes('REVOKE')) {
+        stats.orderPi++;
+      }
+      
+      if (task.includes('IKR') || task.includes('INSTAL') || ketPi.includes('IKR') || status.includes('READY')) {
+        stats.sudahIkr++;
+      }
+      
+      if (status.includes('PS') || status.includes('COMPLETED') || status === 'SUCCESS') {
+        if (isMtd || !pPS) {
+          stats.jumlahPsMtd++;
+        }
+      }
+      
+      if (errCode !== '' || status.includes('KENDALA') || status.includes('HOLD') || status.includes('PENDING')) {
+        if (isYtd || !pInput) stats.kendalaYtd++;
+        if (isMtd || !pInput) stats.kendalaMtd++;
+      }
+      
+      if (status.includes('CANCEL') || status.includes('REVOKE') || status.includes('BATAL')) {
+        if (isYtd || !pInput) stats.canceledYtd++;
+        if (isMtd || !pInput) stats.canceledMtd++;
+      }
+    });
+    
+    return { success: true, data: stats };
+  } catch (e) {
+    return { success: false, message: "Error sistem: " + e.message };
+  }
+}
