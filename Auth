@@ -1,0 +1,70 @@
+// Auth.gs
+function processLogin(username, password) {
+  try {
+    // Menggunakan getConfig untuk mengambil ID spreadsheet
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID')).getSheetByName("Users");
+    if (!sheet) {
+      return { success: false, message: "Sheet 'Users' tidak ditemukan pada Spreadsheet!" };
+    }
+    
+    const dataRange = sheet.getDataRange().getValues();
+    const inputUser = String(username).trim();
+    const inputPass = String(password).trim();
+    
+    for (let i = 1; i < dataRange.length; i++) {
+      const dbEmail = String(dataRange[i][2] || "").trim();
+      const dbUsername = String(dataRange[i][3] || "").trim();
+      const dbPass = String(dataRange[i][4] || "").trim();
+      
+      const dbRole = dataRange[i][6] ? String(dataRange[i][6]).trim().toLowerCase() : 'user';
+      const dbStatus = dataRange[i][7] ? String(dataRange[i][7]).trim().toLowerCase() : '';
+      
+      if ((dbEmail === inputUser || dbUsername === inputUser) && dbPass === inputPass) {
+        if (dbStatus !== 'active') {
+          return { success: false, message: "Akun Anda belum di-approve oleh Superadmin." };
+        }
+        
+        const chatId = String(dataRange[i][5] || "").trim(); 
+        if (!chatId || chatId === "" || chatId === "undefined") {
+          return { success: false, message: "Chat ID Telegram tidak valid." };
+        }
+        
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        const cache = CacheService.getScriptCache();
+        const sessionData = { otp: otp, role: dbRole, name: String(dataRange[i][1] || inputUser) };
+        cache.put(inputUser, JSON.stringify(sessionData), 300);
+        
+        const sendStatus = sendTelegramOTP(chatId, otp);
+        
+        if(sendStatus.status === true) {
+          return { success: true, requireOtp: true, message: "OTP telah dikirim ke Telegram Anda." };
+        } else {
+          return { success: false, message: "Gagal Kirim OTP! " + (sendStatus.errorDetail || "Pastikan sudah tekan Start di Bot Telegram.") };
+        }
+      }
+    }
+    return { success: false, message: "Username/Email atau Password salah!" };
+  } catch(e) {
+    return { success: false, message: "Error Server: " + e.message };
+  }
+}
+
+function verifyOTP(username, inputOtp) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const cachedString = cache.get(username);
+    
+    if (cachedString) {
+      const cachedData = JSON.parse(cachedString);
+      if (cachedData.otp === inputOtp) {
+        cache.remove(username);
+        return { success: true, role: cachedData.role, name: cachedData.name, message: "Login Berhasil!" };
+      }
+    }
+    
+    return { success: false, message: "OTP salah atau sudah kedaluwarsa!" };
+  } catch(e) {
+    return { success: false, message: "Error: " + e.message };
+  }
+}
