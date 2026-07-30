@@ -1,0 +1,4 @@
+function getDailyOrderData() { return getSheetDataByName("List Daily Order"); }
+function getOrderKendalaData() { return getSheetDataByName("Order Kendala"); }
+function getOrderCompletedData() { return getSheetDataByName("Order Completed"); }
+function getDataKendala() { return getSheetDataByName("Data Kendala"); }
