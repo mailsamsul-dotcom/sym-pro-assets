@@ -64,55 +64,55 @@
     .val-yellow { color: #eab308; font-weight: 700;}
     .val-green { color: #22c55e; font-weight: 700;}
 
-            /* --- NOTION STYLE TO DO LIST CSS --- */
-        .notion-row { border-bottom: 1px solid #f3f4f6; transition: background-color 0.15s ease; }
-        .notion-row:hover { background-color: #f9fafb; }
-        .notion-checkbox { width: 16px; height: 16px; border: 1.5px solid #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: white; }
-        .notion-checkbox:hover { background-color: #f3f4f6; }
-        .notion-checkbox.checked { background-color: #3b82f6; border-color: #3b82f6; }
-        .notion-checkbox.checked::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: white; font-size: 10px; }
-        .notion-tag { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;}
-        .tag-default { background: #f3f4f6; color: #4b5563; }
-        .tag-blue { background: #e0e7ff; color: #4338ca; }
-        .tag-green { background: #dcfce7; color: #16a34a; }
-        .tag-red { background: #fee2e2; color: #dc2626; }
-        .tag-yellow { background: #fef9c3; color: #ca8a04; }
-        .tag-purple { background: #f3e8ff; color: #6d28d9; }
-        .task-title { transition: color 0.2s; }
-        .task-title.completed { text-decoration: line-through; color: #9ca3af; }
+    /* --- NOTION STYLE TO DO LIST CSS --- */
+    .notion-row { border-bottom: 1px solid #f3f4f6; transition: background-color 0.15s ease; }
+    .notion-row:hover { background-color: #f9fafb; }
+    .notion-checkbox { width: 16px; height: 16px; border: 1.5px solid #d1d5db; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; background: white; }
+    .notion-checkbox:hover { background-color: #f3f4f6; }
+    .notion-checkbox.checked { background-color: #3b82f6; border-color: #3b82f6; }
+    .notion-checkbox.checked::after { content: '\f00c'; font-family: 'Font Awesome 6 Free'; font-weight: 900; color: white; font-size: 10px; }
+    .notion-tag { padding: 2px 8px; border-radius: 6px; font-size: 10px; font-weight: 500; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px;}
+    .tag-default { background: #f3f4f6; color: #4b5563; }
+    .tag-blue { background: #e0e7ff; color: #4338ca; }
+    .tag-green { background: #dcfce7; color: #16a34a; }
+    .tag-red { background: #fee2e2; color: #dc2626; }
+    .tag-yellow { background: #fef9c3; color: #ca8a04; }
+    .tag-purple { background: #f3e8ff; color: #6d28d9; }
+    .task-title { transition: color 0.2s; }
+    .task-title.completed { text-decoration: line-through; color: #9ca3af; }
 
-        /* --- DASHBOARD KPI EXACT LIGHT THEME CSS --- */
-        .kpi-section-title { font-size: 13px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;}
-        .kpi-panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; padding: 16px;}
-        
-        .trend-table { width: 100%; border-collapse: collapse; font-size: 9px; }
-        .trend-table th { border: 1px solid #e2e8f0; font-weight: 700; padding: 6px 4px; text-align: center; }
-        .trend-table td { border: 1px solid #e2e8f0; font-weight: 700; padding: 6px 4px; text-align: center; color: #475569;}
-        
-        .b2c-card-title { font-size: 12px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; text-align: left; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; margin-bottom: 12px;}
-        .b2c-table { width: 100%; font-size: 9px; }
-        .b2c-table td { padding: 4px 6px; border-bottom: 1px dashed #e2e8f0; color: #334155; font-weight: 600;}
-        .b2c-table tr:last-child td { border-bottom: none; }
-        .b2c-ach-bar { display: flex; border-top: 2px solid #e2e8f0; text-align: center; margin-top: 12px; padding-top: 8px;}
-        .b2c-ach-col { flex: 1; padding: 4px 0; border-right: 1px solid #e2e8f0; background: #f8fafc;}
-        .b2c-ach-col:last-child { border-right: none; }
-        
-        .ttr-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;}
-        .ttr-box-header { padding: 8px; font-size: 11px; font-weight: 800; text-align: center; background: #ffffff; border-bottom: 2px solid #e2e8f0; color: #1e293b;}
-        
-        /* Table IMBAL JASA */
-        .kpi-table th { background: #0f766e; color: white; padding: 8px; font-size: 10px; font-weight: 600; text-align: center; border: 1px solid #0d9488; }
-        .kpi-table td { padding: 6px 8px; font-size: 11px; border: 1px solid #e5e7eb; color: #334155; }
+    /* --- DASHBOARD KPI EXACT LIGHT THEME CSS --- */
+    .kpi-section-title { font-size: 13px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;}
+    .kpi-panel { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05); display: flex; flex-direction: column; overflow: hidden; padding: 16px;}
+    
+    .trend-table { width: 100%; border-collapse: collapse; font-size: 9px; }
+    .trend-table th { border: 1px solid #e2e8f0; font-weight: 700; padding: 6px 4px; text-align: center; }
+    .trend-table td { border: 1px solid #e2e8f0; font-weight: 700; padding: 6px 4px; text-align: center; color: #475569;}
+    
+    .b2c-card-title { font-size: 12px; font-weight: 800; color: #1e3a8a; text-transform: uppercase; text-align: left; padding-bottom: 8px; border-bottom: 2px solid #e2e8f0; margin-bottom: 12px;}
+    .b2c-table { width: 100%; font-size: 9px; }
+    .b2c-table td { padding: 4px 6px; border-bottom: 1px dashed #e2e8f0; color: #334155; font-weight: 600;}
+    .b2c-table tr:last-child td { border-bottom: none; }
+    .b2c-ach-bar { display: flex; border-top: 2px solid #e2e8f0; text-align: center; margin-top: 12px; padding-top: 8px;}
+    .b2c-ach-col { flex: 1; padding: 4px 0; border-right: 1px solid #e2e8f0; background: #f8fafc;}
+    .b2c-ach-col:last-child { border-right: none; }
+    
+    .ttr-box { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; display: flex; flex-direction: column; overflow: hidden;}
+    .ttr-box-header { padding: 8px; font-size: 11px; font-weight: 800; text-align: center; background: #ffffff; border-bottom: 2px solid #e2e8f0; color: #1e293b;}
+    
+    /* Table IMBAL JASA */
+    .kpi-table th { background: #0f766e; color: white; padding: 8px; font-size: 10px; font-weight: 600; text-align: center; border: 1px solid #0d9488; }
+    .kpi-table td { padding: 6px 8px; font-size: 11px; border: 1px solid #e5e7eb; color: #334155; }
 
-        /* Custom Tint Boxes */
-        .box-tint-orange { background-color: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; border-radius: 8px; padding: 12px;}
-        .box-tint-blue { background-color: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; border-radius: 8px; padding: 12px;}
-        .box-tint-green { background-color: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; border-radius: 8px; padding: 12px;}
-        .box-tint-red { background-color: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px;}
-        
-        .sqm-stat-item { flex: 1; text-align: center; padding: 12px 8px;}
-        .sqm-stat-title { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;}
-        .sqm-stat-number { font-size: 28px; font-weight: 900; line-height: 1;}
+    /* Custom Tint Boxes */
+    .box-tint-orange { background-color: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; border-radius: 8px; padding: 12px;}
+    .box-tint-blue { background-color: #eff6ff; color: #2563eb; border: 1px solid #dbeafe; border-radius: 8px; padding: 12px;}
+    .box-tint-green { background-color: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; border-radius: 8px; padding: 12px;}
+    .box-tint-red { background-color: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; border-radius: 8px; padding: 12px;}
+    
+    .sqm-stat-item { flex: 1; text-align: center; padding: 12px 8px;}
+    .sqm-stat-title { font-size: 10px; font-weight: 800; color: #64748b; text-transform: uppercase; margin-bottom: 4px; display: flex; justify-content: center; align-items: center; gap: 4px;}
+    .sqm-stat-number { font-size: 28px; font-weight: 900; line-height: 1;}
 
     /* --- KHUSUS DASHBOARD KPI ASS B2C (MATCH DESAIN REFERENSI) --- */
     .b2c-card-ref {
@@ -127,7 +127,7 @@
     .b2c-card-title-ref {
         font-size: 13px;
         font-weight: 800;
-        color: #1d4ed8; /* Blue-700 */
+        color: #1d4ed8;
         text-transform: uppercase;
         letter-spacing: 0.5px;
         padding-bottom: 8px;
