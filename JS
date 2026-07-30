@@ -1,24 +1,16 @@
 <script>
     let tempUser = "";
-    
-    // CACHE UNTUK DASHBOARD KPI
     let kpiAssB2CCache = null;
     let kpiSqmCache = null;
 
-    // VARIBEL PAGINATION BARU
     let currentPage = 1;
     let rowsPerPage = 50;
     let filteredRowsData = []; 
     let globalDailyHeaders = []; let globalDailyRows = [];
     let currentEditingRowIndex = -1; let isOrderEditMode = false;
     
-    // VARIBEL STATE UNTUK TOMBOL FOLLOW UP
     window.followedUpOrders = {}; 
-
-    // VARIBEL STATE UNTUK DATA KENDALA
     let kendalaHeaders = []; let kendalaRows = [];
-    
-    // STATE TO DO LIST DINAMIS DARI DATABASE
     let dbTodoTasks = [];
     
     let techniciansCache = []; let errorCodesCache = []; let mappingTimCache = []; let usersCache = [];
@@ -46,14 +38,19 @@
         const roleLower = String(role).toLowerCase(); 
         const manageUserMenu = document.getElementById('menu-manage-user');
         const btnNewTask = document.getElementById('btn-new-task');
+        const acMenu = document.getElementById('menu-access-control');
 
-        if (roleLower === 'superadmin') { 
+        if (roleLower === 'superadmin') {
+            if(acMenu) acMenu.classList.remove('hidden');
+
             if(manageUserMenu) { 
                 manageUserMenu.classList.remove('hidden'); 
                 manageUserMenu.classList.add('block'); 
             }
             if(btnNewTask) btnNewTask.classList.remove('hidden');
         } else { 
+            if(acMenu) acMenu.classList.add('hidden'); // Sembunyikan menu AC jika bukan superadmin
+
             if(manageUserMenu) { 
                 manageUserMenu.classList.add('hidden'); 
                 manageUserMenu.classList.remove('block'); 
@@ -86,19 +83,25 @@
         });
     };
 
-    // ===============================================================
-    // FUNGSI LOAD KPI DASHBOARD (MENGAMBIL VISUAL LANGSUNG DARI SPREADSHEET)
-    // ===============================================================
     function loadKpiDashboard(menuName) {
         if (typeof google === 'undefined') return;
 
+        const assContent  = document.getElementById('dashboard-ass-b2c-content');
+        const provContent = document.getElementById('dashboard-prov-b2c-content');
+        const titleEl     = document.getElementById('dashboard-empty-title');
+
+        if (assContent)  assContent.classList.add('hidden');
+        if (provContent) provContent.classList.add('hidden');
+        if (titleEl)     titleEl.classList.add('hidden');
+
         if (menuName === 'dashboard-b2c') {
+            if (assContent) assContent.classList.remove('hidden');
             showMessage("Mengambil data rekap KPI Ass B2C dari Spreadsheet...", "success");
             
             google.script.run
             .withSuccessHandler(function(res) {
                 if (res && res.success) {
-                    showMessage("Data KPI berhasil diperbarui!", "success");
+                    showMessage("Data KPI Ass B2C berhasil diperbarui!", "success");
                     renderKpiAssB2CDirect(res.data);
                 } else {
                     showMessage("Gagal: " + (res ? res.message : "Error server"), "error");
@@ -107,24 +110,58 @@
             .withFailureHandler(function(err) {
                 showMessage("Error Server: " + err.message, "error");
             })
-            .getKpiAssB2CSummary(); // Tarik angka hasil rumus spreadsheet
+            .getKpiAssB2CSummary();
         } 
+        else if (menuName === 'dashboard-prov-b2c') {
+            if (provContent) provContent.classList.remove('hidden');
+            showMessage("Mengambil data KPI Prov B2C (DB NewSales Kpro)...", "success");
+            
+            google.script.run
+            .withSuccessHandler(function(res) {
+                if (res && res.success) {
+                    showMessage("Data KPI Prov B2C berhasil diperbarui!", "success");
+                    renderKpiProvB2CDirect(res.data);
+                } else {
+                    showMessage("Gagal: " + (res ? res.message : "Error server"), "error");
+                }
+            })
+            .withFailureHandler(function(err) {
+                showMessage("Error Server: " + err.message, "error");
+            })
+            .getKpiProvB2CSummary();
+        }
         else if (menuName === 'dashboard-sqm') {
-            // ... logika dashboard-sqm Anda ...
+            if (titleEl) {
+                titleEl.innerText = "Dasboard Result SQM (Menunggu Penyusunan)";
+                titleEl.classList.remove('hidden');
+            }
         }
     }
 
-    // FUNGSI RENDER LANGSUNG HASIL SPREADSHEET KE HTML DASHBOARD
+    function renderKpiProvB2CDirect(d) {
+        const setNum = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = Number(val || 0).toLocaleString('id-ID');
+        };
+
+        setNum('prov-transaksi-mtd', d.transaksiMtd);
+        setNum('prov-order-pi',      d.orderPi);
+        setNum('prov-sudah-ikr',     d.sudahIkr);
+        setNum('prov-jumlah-ps-mtd', d.jumlahPsMtd);
+        setNum('prov-kendala-mtd',   d.kendalaMtd);
+        setNum('prov-kendala-ytd',   d.kendalaYtd);
+        setNum('prov-canceled-mtd',  d.canceledMtd);
+        setNum('prov-canceled-ytd',  d.canceledYtd);
+    }
+
     function renderKpiAssB2CDirect(d) {
         const setTxt = (id, val) => {
             const el = document.getElementById(id);
             if (el) el.innerText = val !== undefined && val !== null && val !== "" ? val : "0";
         };
 
-        // 1. Total List Tiket
         setTxt('ass-tot-list', Number(d.totalList || 0).toLocaleString('id-ID'));
 
-        // 2. Service Availability (SA)
         setTxt('ass-sa-open',     Number(d.sa.open || 0).toLocaleString('id-ID'));
         setTxt('ass-sa-dia-fsk',  d.sa.diaFsk);  setTxt('ass-sa-dia-lgc',  d.sa.diaLgc);
         setTxt('ass-sa-plat-fsk', d.sa.platFsk); setTxt('ass-sa-plat-lgc', d.sa.platLgc);
@@ -132,7 +169,6 @@
         setTxt('ass-sa-reg-fsk',  d.sa.regFsk);  setTxt('ass-sa-reg-lgc',  d.sa.regLgc);
         setTxt('ass-sa-gamas',    d.sa.gamas);   setTxt('ass-sa-nongamas', d.sa.nongamas);
         
-        // Realisasi & Ach SA (Format desimal)
         let saRealVal = Number(d.sa.real || 0);
         let saAchVal  = Number(d.sa.ach || 0);
         setTxt('ass-sa-real', (saRealVal > 1 ? saRealVal : saRealVal * 100).toFixed(2) + "%");
@@ -144,7 +180,6 @@
             elSaAch.className = achDisplay >= 100 ? "text-xl font-black text-emerald-600" : "text-xl font-black text-rose-600";
         }
 
-        // 3. Assurance Guarantee (AG)
         setTxt('ass-ag-open',     Number(d.ag.open || 0).toLocaleString('id-ID'));
         setTxt('ass-ag-dia-fsk',  d.ag.diaFsk);  setTxt('ass-ag-dia-lgc',  d.ag.diaLgc);
         setTxt('ass-ag-plat-fsk', d.ag.platFsk); setTxt('ass-ag-plat-lgc', d.ag.platLgc);
@@ -163,7 +198,6 @@
             elAgAch.className = achDisplay >= 100 ? "text-xl font-black text-emerald-600" : "text-xl font-black text-rose-600";
         }
 
-        // 4. TTR Compliance Cards (TTR 1 s.d. 5)
         const renderTtrDirect = (prefix, ttrData) => {
             setTxt(`${prefix}-open`,    ttrData.open);
             setTxt(`${prefix}-comp-c`,  ttrData.c);
@@ -198,7 +232,6 @@
         renderTtrDirect('ass-ttr5', d.ttr5);
     }
 
-    /* ======= FUNGSI DASHBOARD (Daily Report) ======= */
     function loadDashboardData() {
         const loadingEl = document.getElementById('dash-loading'); const contentEl = document.getElementById('dash-content');
         if (loadingEl && contentEl) {
@@ -234,6 +267,14 @@
         let tselIdx = headers.findIndex(h => h === 'order id tsel' || h.includes('sc order no') || h.includes('csrm'));
         let custIdx = headers.findIndex(h => h === 'customer name');
 
+        let validTeamsSet = new Set();
+        if (mappingTimCache && mappingTimCache.length > 0) {
+            mappingTimCache.forEach(m => {
+                let key = `${String(m.leader).trim().toLowerCase()}|${String(m.member).trim().toLowerCase()}`;
+                validTeamsSet.add(key);
+            });
+        }
+
         window.dashFilteredData = { total: {all:[], create:[], migrate:[], modify:[]}, kp: {all:[], create:[], migrate:[], modify:[]}, kt: {all:[], create:[], migrate:[], modify:[]}, op: {all:[], create:[], migrate:[], modify:[]}, comp: {all:[], create:[], migrate:[], modify:[]} };
 
         let stats = { total: {all:0, create:0, migrate:0, modify:0}, kp: {all:0, create:0, migrate:0, modify:0}, kt: {all:0, create:0, migrate:0, modify:0}, op: {all:0, create:0, migrate:0, modify:0}, comp: {all:0, create:0, migrate:0, modify:0}, timSummary: {} };
@@ -246,7 +287,8 @@
             let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : "";
             let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : "";
             
-            if (!leader || leader === "-" || !member || member === "-") return;
+            let teamKey = `${leader.toLowerCase()}|${member.toLowerCase()}`;
+            if (!leader || !member || !validTeamsSet.has(teamKey)) return;
 
             let crmRaw = crmIdx !== -1 ? String(row[crmIdx] || "").trim().toLowerCase() : "";
             let type = "other";
@@ -453,7 +495,7 @@
         let customIcon = L.divIcon({ html: iconHtml, className: '', iconSize: [24, 24], iconAnchor: [12, 12] });
 
         L.marker([lat, lng], {icon: customIcon})
-         .bindPopup(`<div class="text-xs"><b>WO:</b> ${pt.wo}<br><b>Alamat:</b> ${pt.address}<br><b>Status:</b> <span style="color:${color};font-weight:bold;">${pt.cat.toUpperCase()}</span></div>`)
+         .bindPopup(`<div class="text-xs"><b>WO:</b> ${pt.wo}<br><b>Alamat:</b>${pt.address}<br><b>Status:</b> <span style="color:${color};font-weight:bold;">${pt.cat.toUpperCase()}</span></div>`)
          .addTo(mapInstance);
     }
 
@@ -699,13 +741,12 @@
     }
 
     function switchMenu(menuName) {
-        // DAFTAR MENU LENGKAP TERBARU
         const menus = [
             'dashboard-b2c', 'dashboard-prov-b2c', 'dashboard-sqm', 
             'daily-report', 'daily-order', 'order-hi', 'order-kendala', 'order-completed', 'data-kendala', 'board-kendala', 
             'todo-list', 'usulan-qe', 'update-data', 
             'mapping-tim', 'manage-user', 'data-naker', 
-            'user-profile'
+            'user-profile', 'access-control' // <-- PASTIKAN access-control ADA DI SINI JIKA DIBUTUHKAN (meskipun tidak wajib untuk toggle)
         ];
         
         menus.forEach(m => {
@@ -719,8 +760,14 @@
             activeEl.classList.add('bg-blue-50', 'text-[#0d55d4]', 'font-semibold'); 
         }
 
-        // DAFTAR WRAPPER VIEW TERBARU
-        const views = ['dashboard', 'daily-report', 'todo-list', 'usulan-qe', 'daily-order', 'mapping-tim', 'manage-user', 'data-naker', 'update-data', 'data-kendala', 'board-kendala', 'user-profile'];
+        // --- FIX: TAMBAHKAN 'access-control' DI ARRAY BAWAH INI ---
+        const views = [
+            'dashboard', 'daily-report', 'todo-list', 'usulan-qe', 
+            'daily-order', 'mapping-tim', 'manage-user', 'data-naker', 
+            'update-data', 'data-kendala', 'board-kendala', 'user-profile', 
+            'access-control' // INI YANG MENGHILANGKAN CONFIG SAAT PINDAH MENU
+        ];
+        
         views.forEach(view => { 
             const wrapper = document.getElementById('view-wrapper-' + view); 
             if(wrapper) wrapper.classList.add('hidden'); 
@@ -781,6 +828,7 @@
         else if(menuName === 'board-kendala') { 
             const wr = document.getElementById('view-wrapper-board-kendala');
             if(wr) wr.classList.remove('hidden'); 
+            loadBoardKendalaData();
         }
         else if(menuName === 'user-profile') {
             const w = document.getElementById('view-wrapper-user-profile');
@@ -796,18 +844,26 @@
             currentActiveMode = menuName; 
             const wr = document.getElementById('view-wrapper-daily-order');
             if(wr) wr.classList.remove('hidden');
+            
             let titleHtml = `<i class="fa-solid fa-list-check text-[#0d55d4] mr-2"></i> `;
             if(menuName === 'daily-order') titleHtml += "Inbox Assign"; 
             else if(menuName === 'order-hi') titleHtml = `<i class="fa-solid fa-user-check text-[#0d55d4] mr-2"></i> Order Hi`; 
-            else if(menuName === 'order-kendala') titleHtml += "Inbox Kendala"; 
-            else if(menuName === 'order-completed') titleHtml += "List Order Completed";
+            else if(menuName === 'order-kendala') titleHtml = `<i class="fa-solid fa-user-xmark text-rose-600 mr-2"></i> List Kendala Pelanggan`; 
+            else if(menuName === 'order-completed') titleHtml = `<i class="fa-solid fa-circle-check text-emerald-600 mr-2"></i> List Data Completed (PS)`;
+            
             const elTitle = document.getElementById('view-title');
             if(elTitle) elTitle.innerHTML = titleHtml; 
             loadActiveOrderData();
         }
+        else if(menuName === 'access-control') { 
+            const w = document.getElementById('view-wrapper-access-control'); 
+            if(w) {
+                w.classList.remove('hidden');
+                loadAccessControlData();
+            }
+        }
     }
 
-    /* === FUNGSI MODAL SQM & IMBAL JASA === */
     function openImbalJasaModal() {
         const modal = document.getElementById('imbal-jasa-modal');
         if(modal) modal.classList.remove('hidden');
@@ -852,7 +908,6 @@
         if(bodyEl) bodyEl.innerHTML = body;
     }
 
-    /* === FUNGSI TO DO LIST DENGAN DATABASE === */
     function loadToDoData(isSilent = false) {
         if (!isSilent) {
             const lEl = document.getElementById('todo-loading');
@@ -965,13 +1020,11 @@
 
                 html += `
                     <div class="notion-row flex items-center px-4 py-2.5 text-[11px]">
-                        <!-- Checkbox & Title -->
                         <div class="flex items-center gap-3 flex-1 min-w-[200px]">
-                            <div class="notion-checkbox ${checkClass} shrink-0" onclick="toggleTaskStatus('${task.id}', '${task.status}', ${task.originalIndex})"></div>
+                            <div class="notion-checkbox ${checkClass} shrink-0" onclick="toggleTaskStatus('${task.id}', '${task.status}',${task.originalIndex})"></div>
                             <span class="task-title ${textClass} select-none cursor-pointer flex-1 py-0.5 leading-tight hover:underline" onclick="openTaskModal('${task.id}')">${task.title}</span>
                         </div>
                         
-                        <!-- Properties -->
                         <div class="w-32 hidden md:flex items-center gap-1.5 text-gray-500">
                             <div class="w-4 h-4 rounded-full bg-gray-200 flex items-center justify-center text-[8px] font-bold text-gray-600"><i class="fa-regular fa-user"></i></div>
                             <span class="truncate">${assignText}</span>
@@ -1097,7 +1150,6 @@
         }
     }
 
-    /* === FUNGSI TABEL DATA KENDALA === */
     function loadDataKendala(forceRefresh = false) {
         const tbody = document.getElementById('data-kendala-body'); 
         if(!tbody) return;
@@ -1110,11 +1162,19 @@
                 return; 
             }
             kendalaHeaders = res.headers || []; 
-            kendalaRows = res.rows || []; 
+            let allRows = res.rows || []; 
+
+            let errIdx = kendalaHeaders.findIndex(h => String(h).trim().toUpperCase() === 'ERRORCODE');
+
+            kendalaRows = allRows.filter(row => {
+                let errVal = errIdx !== -1 ? String(row[errIdx] || "").trim().toUpperCase() : "";
+                return errVal.includes("KENDALA TEKNIK") || errVal.includes("JARINGAN");
+            });
+
             renderTableKendala(kendalaRows);
         }).withFailureHandler(function(err) { 
             tbody.innerHTML = `<tr><td colspan="8" class="text-center py-6 text-red-500 font-semibold">Error Server: ${err.message}</td></tr>`; 
-        }).getDataKendala();
+        }).getOrderKendalaData(); 
     }
 
     const KENDALA_COLUMNS = ["Workorder", "Order ID TSEL", "Customer Name", "Follow Up Status", "Tanggal Follow Up", "Assigned To", "Update"];
@@ -1207,7 +1267,6 @@
         XLSX.utils.book_append_sheet(wb, ws, "Data Kendala"); 
         XLSX.writeFile(wb, `Data_Kendala_Export.xlsx`);
     }
-    /* ============================================== */
 
     function loadUserManagementData() {
         const tbody = document.getElementById('manage-user-body'); if(!tbody || typeof google === 'undefined') return;
@@ -1325,14 +1384,33 @@
             if(hClean === 'member') memberIdx = idx; 
         });
 
+        let validTeamsSet = new Set();
+        if (mappingTimCache && mappingTimCache.length > 0) {
+            mappingTimCache.forEach(m => {
+                let key = `${String(m.leader).trim().toLowerCase()}|${String(m.member).trim().toLowerCase()}`;
+                validTeamsSet.add(key);
+            });
+        }
+
         let filtered = globalDailyRows.filter(row => {
             if (currentActiveMode === 'daily-order' || currentActiveMode === 'order-hi') {
                 let leader = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : ""; 
                 let member = memberIdx !== -1 ? String(row[memberIdx] || "").trim() : ""; 
-                let isAssigned = (leader !== "" && leader !== "-") && (member !== "" && member !== "-");
-                if (currentActiveMode === 'daily-order' && isAssigned) return false; 
-                if (currentActiveMode === 'order-hi' && !isAssigned) return false;
+                
+                let teamKey = `${leader.toLowerCase()}|${member.toLowerCase()}`;
+                let isAssignedToValidTeam = validTeamsSet.has(teamKey);
+
+                if (currentActiveMode === 'daily-order' && isAssignedToValidTeam) return false; 
+                if (currentActiveMode === 'order-hi' && !isAssignedToValidTeam) return false;
             }
+
+            if (currentActiveMode === 'order-kendala') {
+                let errVal = errorcodeIdx !== -1 ? String(row[errorcodeIdx] || "").trim().toUpperCase() : "";
+                if (!errVal.includes("KENDALA PELANGGAN")) {
+                    return true;
+                }
+            }
+
             let matchSearch = true;
             if(searchQuery !== "") { 
                 let woVal = workorderIdx !== -1 ? String(row[workorderIdx] || "").toLowerCase() : ""; 
@@ -1472,7 +1550,7 @@
                 if (colName === "Assigned To") { 
                     let leader = getColVal(row, "LEADER"); 
                     let member = getColVal(row, "MEMBER"); 
-                    valHtml = `<div class="leading-relaxed"><div>👷🏻 Leader : <span class="font-semibold text-gray-800">${leader || "-"}</span></div><div>👷🏻 Member : <span class="font-semibold text-gray-800">${member || "-"}</span></div></div>`; 
+                    valHtml = `<div class="leading-relaxed"><div>Leader : <span class="font-semibold text-gray-800">${leader || "-"}</span></div><div>Member : <span class="font-semibold text-gray-800">${member || "-"}</span></div></div>`; 
                 } 
                 else if (colName === "CRM Order Type") { 
                     let upperCrm = String(getColVal(row, colName)).trim().toUpperCase(); 
@@ -1632,11 +1710,28 @@
             document.getElementById('btn-assign-container').innerHTML = `<button onclick="openTechnicianSelector()" class="px-5 py-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl text-xs transition shadow-xs flex items-center gap-1.5 cursor-pointer"><i class="fa-solid fa-rotate"></i> ReAssign</button>`;
         }
         let payload = {
-            sheetName: sheetTargetName, action: actionType, oldWorkorder: oldWo, oldTrackId: oldTr,
-            workorder: isOrderEditMode && document.getElementById('edit-wo') ? document.getElementById('edit-wo').value : oldWo, trackId: isOrderEditMode && document.getElementById('edit-track') ? document.getElementById('edit-track').value : oldTr,
-            crmOrderType: isOrderEditMode && document.getElementById('edit-crm') ? document.getElementById('edit-crm').value : getVal("CRM Order Type"), serviceNo: isOrderEditMode && document.getElementById('edit-service') ? document.getElementById('edit-service').value : getVal("Service No."),
-            packageInfo: isOrderEditMode && document.getElementById('edit-pkg') ? document.getElementById('edit-pkg').value : getVal("PACKAGE_INFO"), leader: finalLeader, member: finalMember, timName: finalTimName, assignTime: finalTimestamp,
-            errorCode: document.getElementById('input-errcode') ? document.getElementById('input-errcode').value : getVal("ERRORCODE"), subErrorCode: document.getElementById('input-suberr') ? document.getElementById('input-suberr').value : getVal("SUBERRORCODE"), engineerMemo: document.getElementById('input-memo') ? document.getElementById('input-memo').value : getVal("ENGINEERMEMO (SA)")
+            sheetName: sheetTargetName, 
+            action: actionType, 
+            oldWorkorder: oldWo, 
+            oldTrackId: oldTr,
+            workorder: isOrderEditMode && document.getElementById('edit-wo') ? document.getElementById('edit-wo').value : oldWo, 
+            trackId: isOrderEditMode && document.getElementById('edit-track') ? document.getElementById('edit-track').value : oldTr,
+            crmOrderType: isOrderEditMode && document.getElementById('edit-crm') ? document.getElementById('edit-crm').value : getVal("CRM Order Type"), 
+            serviceNo: isOrderEditMode && document.getElementById('edit-service') ? document.getElementById('edit-service').value : getVal("Service No."),
+            packageInfo: isOrderEditMode && document.getElementById('edit-pkg') ? document.getElementById('edit-pkg').value : getVal("PACKAGE_INFO"), 
+            leader: finalLeader, 
+            member: finalMember, 
+            timName: finalTimName, 
+            assignTime: finalTimestamp,
+            errorCode: document.getElementById('input-errcode') ? document.getElementById('input-errcode').value : getVal("ERRORCODE"), 
+            subErrorCode: document.getElementById('input-suberr') ? document.getElementById('input-suberr').value : getVal("SUBERRORCODE"), 
+            engineerMemo: document.getElementById('input-memo') ? document.getElementById('input-memo').value : getVal("ENGINEERMEMO (SA)"),
+            
+            customerName: getVal("Customer Name"),
+            address: getVal("Address"),
+            contactNumber: getVal("Contact Number"),
+            dateCreated: getVal("Date Created"),
+            bookingDate: getVal("Booking Date")
         };
         if (typeof google === 'undefined') return;
         google.script.run.withSuccessHandler(function(res) {
@@ -1654,9 +1749,18 @@
 
     function exportExcelActive() {
         if(!globalDailyHeaders || globalDailyHeaders.length === 0) return;
-        let dataToExport = [globalDailyHeaders, ...globalDailyRows]; let ws = XLSX.utils.aoa_to_sheet(dataToExport); let wb = XLSX.utils.book_new();
-        let exportSheetName = currentActiveMode === 'order-kendala' ? "Order Kendala" : (currentActiveMode === 'order-completed' ? "Order Completed" : (currentActiveMode === 'order-hi' ? "Order Hi" : "List Daily Order"));
-        XLSX.utils.book_append_sheet(wb, ws, exportSheetName); XLSX.writeFile(wb, `${exportSheetName}_Export.xlsx`);
+        let dataToExport = [globalDailyHeaders, ...globalDailyRows]; 
+        let ws = XLSX.utils.aoa_to_sheet(dataToExport); 
+        let wb = XLSX.utils.book_new();
+        
+        let exportSheetName = "List Daily Order";
+        if (currentActiveMode === 'order-kendala') exportSheetName = "List Kendala Pelanggan";
+        else if (currentActiveMode === 'order-completed') exportSheetName = "List Data Completed (PS)";
+        else if (currentActiveMode === 'order-hi') exportSheetName = "Order Hi";
+        else if (currentActiveMode === 'daily-order') exportSheetName = "Inbox Assign";
+        
+        XLSX.utils.book_append_sheet(wb, ws, exportSheetName); 
+        XLSX.writeFile(wb, `${exportSheetName}_Export.xlsx`);
     }
 
     function updateFileName(input) { document.getElementById('file-chosen').innerText = input.files[0] ? input.files[0].name : "No file chosen"; }
@@ -1682,4 +1786,398 @@
         }; reader.readAsArrayBuffer(file);
     }
     function logout() { localStorage.removeItem("sym_pro_user"); localStorage.removeItem("sym_pro_role"); document.getElementById('dashboard-wrapper').classList.add('hidden'); document.getElementById('auth-bg').style.display = 'block'; document.getElementById('auth-card-container').style.display = 'flex'; switchView('login'); document.getElementById('login-user').value = ''; document.getElementById('login-pass').value = ''; }
+
+    /* ========================================================= */
+    /* LOGIKA KANBAN BOARD KENDALA TEKNIK + DRAG & DROP + RBAC   */
+    /* ========================================================= */
+    let boardKendalaHeaders = [];
+    let boardKendalaRows = [];
+    window.kanbanHistories = {}; 
+
+    function loadBoardKendalaData(forceRefresh = false) {
+        try {
+            const container = document.getElementById('kanban-container');
+            const loading = document.getElementById('board-loading');
+            
+            if (container) container.innerHTML = '';
+            if (loading) loading.classList.remove('hidden');
+
+            if (typeof google === 'undefined') return;
+
+            google.script.run.withSuccessHandler(function(res) {
+                if (loading) loading.classList.add('hidden');
+                if(!res || !res.success) { showMessage("Gagal memuat Board: " + (res ? res.message : ''), "error"); return; }
+                
+                boardKendalaHeaders = res.headers || [];
+                let allRows = res.rows || [];
+
+                let errIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'ERRORCODE');
+                let subErrIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'SUBERRORCODE');
+
+                boardKendalaRows = allRows.filter(row => {
+                    let errVal = errIdx !== -1 ? String(row[errIdx] || "").trim().toUpperCase() : "";
+                    return errVal.includes("KENDALA TEKNIK") || errVal.includes("JARINGAN");
+                });
+
+                let uniqueSubErrs = new Set();
+                boardKendalaRows.forEach(row => {
+                    let subVal = subErrIdx !== -1 ? String(row[subErrIdx] || "").trim() : "";
+                    if (subVal && subVal !== "-") uniqueSubErrs.add(subVal);
+                });
+
+                let subErrSelect = document.getElementById('board-filter-suberr');
+                if (subErrSelect) {
+                    let opts = `<option value="">Semua Sub Error Code</option>`;
+                    Array.from(uniqueSubErrs).sort().forEach(val => { opts += `<option value="${val}">${val}</option>`; });
+                    subErrSelect.innerHTML = opts;
+                }
+
+                applyBoardFilters();
+
+            }).withFailureHandler(function(err) {
+                if (document.getElementById('board-loading')) document.getElementById('board-loading').classList.add('hidden');
+                showMessage("Error Server: " + err.message, "error");
+            }).getOrderKendalaData();
+        } catch (e) {
+            document.getElementById('kanban-container').innerHTML = `<div class="p-5 text-red-500 font-bold w-full text-center">Error load data: ${e.message}</div>`;
+        }
+    }
+
+    function applyBoardFilters() {
+        try {
+            const elSearch = document.getElementById('board-search');
+            const elSubErr = document.getElementById('board-filter-suberr');
+            const elStart = document.getElementById('board-start-date');
+            const elEnd = document.getElementById('board-end-date');
+
+            const searchQ = elSearch ? elSearch.value.toLowerCase().trim() : "";
+            const subErrFilter = elSubErr ? elSubErr.value.toLowerCase() : "";
+            const startDateStr = elStart ? elStart.value : ""; 
+            const endDateStr = elEnd ? elEnd.value : ""; 
+
+            let startObj = startDateStr ? new Date(startDateStr) : null;
+            let endObj = endDateStr ? new Date(endDateStr) : null;
+            if (startObj) startObj.setHours(0,0,0,0);
+            if (endObj) endObj.setHours(23,59,59,999);
+
+            let woIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase().includes('WORKORDER'));
+            let trackIdx = boardKendalaHeaders.findIndex(h => { let hc = String(h || "").trim().toUpperCase(); return hc === 'ORDER ID TSEL' || hc.includes('SC ORDER NO') || hc.includes('CSRM'); });
+            let subErrIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'SUBERRORCODE');
+            let recordDateIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'RECORD_DATE');
+            let dateCreatedIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'DATE CREATED');
+            
+            let filtered = boardKendalaRows.filter(row => {
+                let woVal = woIdx !== -1 ? String(row[woIdx] || "").toLowerCase() : "";
+                let tVal = trackIdx !== -1 ? String(row[trackIdx] || "").toLowerCase() : "";
+                let subVal = subErrIdx !== -1 ? String(row[subErrIdx] || "").toLowerCase() : "";
+
+                if (searchQ && !(woVal.includes(searchQ) || tVal.includes(searchQ))) return false;
+                if (subErrFilter && subVal !== subErrFilter) return false;
+
+                let dateVal = recordDateIdx !== -1 ? String(row[recordDateIdx] || "").trim() : "";
+                if (!dateVal && dateCreatedIdx !== -1) dateVal = String(row[dateCreatedIdx] || "").trim();
+
+                if (startObj || endObj) {
+                    if (!dateVal) return false; 
+                    let rowDateObj = null;
+                    if (dateVal.includes("/")) {
+                        let cleanDate = dateVal.split(" ")[0].replace(/,/g, '');
+                        let parts = cleanDate.split("/");
+                        if (parts.length === 3) rowDateObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    } else {
+                        rowDateObj = new Date(dateVal);
+                    }
+                    if (rowDateObj && !isNaN(rowDateObj.getTime())) {
+                        if (startObj && rowDateObj < startObj) return false;
+                        if (endObj && rowDateObj > endObj) return false;
+                    }
+                }
+                return true;
+            });
+
+            renderKanbanBoard(filtered);
+        } catch(e) {
+            document.getElementById('kanban-container').innerHTML = `<div class="p-5 text-red-500 font-bold w-full text-center">Error saat filter: ${e.message}</div>`;
+        }
+    }
+
+    function renderKanbanBoard(rows) {
+        const container = document.getElementById('kanban-container');
+        if (!container) return;
+        
+        try {
+            const columns = {
+                'OPEN': { title: 'Open / Belum FO', color: 'bg-slate-200', text: 'text-slate-700', border: 'border-slate-300', items: [] },
+                'PROGRESS': { title: 'Progress', color: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300', items: [] },
+                'FINISH_INSTALL': { title: 'Finish Install', color: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-300', items: [] },
+                'VALID_4': { title: 'Valid 4', color: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-300', items: [] },
+                'COMPLETED': { title: 'Completed', color: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-300', items: [] },
+                'DROP': { title: 'Drop', color: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-300', items: [] }
+            };
+
+            let woIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase().includes('WORKORDER'));
+            let trackIdx = boardKendalaHeaders.findIndex(h => { let hc = String(h || "").trim().toUpperCase(); return hc === 'ORDER ID TSEL' || hc.includes('SC ORDER NO') || hc.includes('CSRM'); });
+            let custIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'CUSTOMER NAME');
+            let subErrIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'SUBERRORCODE');
+            let leaderIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'LEADER');
+            let memoIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase().includes('ENGINEERMEMO'));
+            let kStatusIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'KANBAN_STATUS');
+            let kHistoryIdx = boardKendalaHeaders.findIndex(h => String(h || "").trim().toUpperCase() === 'KANBAN_HISTORY');
+
+            window.kanbanHistories = {}; 
+
+            rows.forEach(row => {
+                let woVal = woIdx !== -1 ? String(row[woIdx] || "").trim() : "";
+                let tVal = trackIdx !== -1 ? String(row[trackIdx] || "").trim() : "";
+                let custVal = custIdx !== -1 ? String(row[custIdx] || "").trim() : "-";
+                let subErrVal = subErrIdx !== -1 ? String(row[subErrIdx] || "").trim() : "-";
+                let leaderVal = leaderIdx !== -1 ? String(row[leaderIdx] || "").trim() : "-";
+                let memoVal = memoIdx !== -1 ? String(row[memoIdx] || "").trim() : "";
+                
+                let rowKey = tVal || woVal;
+                let status = kStatusIdx !== -1 ? (String(row[kStatusIdx] || "OPEN").trim() || 'OPEN') : 'OPEN';
+                let historyStr = kHistoryIdx !== -1 ? String(row[kHistoryIdx] || "") : "";
+                
+                window.kanbanHistories[rowKey] = historyStr;
+                let cardData = { wo: woVal, tsel: tVal, cust: custVal, suberr: subErrVal, leader: leaderVal, memo: memoVal, key: rowKey };
+
+                if (columns[status]) columns[status].items.push(cardData);
+                else columns['OPEN'].items.push(cardData);
+            });
+
+            let html = '';
+            Object.keys(columns).forEach(colKey => {
+                const col = columns[colKey];
+                html += `<div class="min-w-[300px] w-[300px] bg-gray-50/80 border border-gray-200 rounded-2xl flex flex-col min-h-[400px] max-h-full shrink-0">
+                    <div class="px-4 py-3.5 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-gray-100/90 rounded-t-2xl z-10 backdrop-blur-sm shadow-sm">
+                        <h3 class="text-xs font-black ${col.text} tracking-wide uppercase flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full ${col.color} border ${col.border} inline-block shadow-xs"></span>
+                            ${col.title}
+                        </h3>
+                        <span class="${col.color} ${col.text} text-[10px] font-bold px-2 py-0.5 rounded-full shadow-xs border ${col.border}">${col.items.length}</span>
+                    </div>
+                    <div class="p-3 flex-1 overflow-y-auto custom-scrollbar space-y-3" ondragover="allowDrop(event, '${colKey}')" ondrop="drop(event, '${colKey}', '${col.title}')">`;
+
+                col.items.forEach(item => {
+                    let displayId = item.tsel ? item.tsel : item.wo;
+                    let safeKey = String(item.key).replace(/'/g, "\\'");
+                    let safeWo = String(item.wo).replace(/'/g, "\\'");
+                    let safeTsel = String(item.tsel).replace(/'/g, "\\'");
+                    let safeMemo = String(item.memo || "").replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+                    
+                    let displayMemo = item.memo ? `<div class="mt-2.5 pt-2.5 border-t border-gray-100 text-[10px] text-gray-500 font-medium leading-snug line-clamp-3" title="${safeMemo}"><i class="fa-solid fa-comment-dots text-gray-400 mr-1.5"></i>${item.memo}</div>` : "";
+                    
+                    html += `
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200 cursor-grab active:cursor-grabbing hover:border-blue-400 hover:shadow-md transition-all group"
+                         draggable="true" 
+                         onclick="openDetailModalByWo('${safeWo}')"
+                         ondragstart="drag(event, '${safeKey}', '${safeWo}', '${safeTsel}', '${colKey}')">
+                        <div class="flex items-start justify-between mb-1">
+                            <span class="text-xs font-black text-blue-700 group-hover:text-blue-800 break-all leading-tight">${displayId}</span>
+                            <div class="flex items-center gap-1 shrink-0">
+                                <button onclick="event.stopPropagation(); openKanbanUpdateOnly('${safeKey}', '${safeWo}', '${safeTsel}', '${colKey}')" title="Update Progres" class="text-amber-500 hover:text-amber-600 transition p-1"><i class="fa-solid fa-pen-to-square"></i></button>
+                                <button onclick="event.stopPropagation(); viewKanbanHistory('${safeKey}')" title="Lihat History" class="text-gray-400 hover:text-blue-600 transition p-1"><i class="fa-solid fa-clock-rotate-left"></i></button>
+                            </div>
+                        </div>
+                        <div class="text-[11px] font-bold text-gray-800 mb-2.5 leading-tight pointer-events-none">${item.cust}</div>
+                        <div class="flex flex-wrap items-center gap-2 mb-2.5 pointer-events-none">
+                            <span class="bg-orange-50 text-orange-600 border border-orange-100 px-2 py-0.5 rounded text-[9px] font-bold shadow-xs max-w-full"><i class="fa-solid fa-triangle-exclamation mr-1"></i>${item.suberr}</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 text-[10px] text-gray-500 font-semibold bg-gray-50 p-1.5 rounded-lg border border-gray-100 pointer-events-none">
+                            <div class="w-5 h-5 rounded-full bg-white shadow-xs text-gray-400 flex items-center justify-center shrink-0"><i class="fa-solid fa-user-tie text-[9px]"></i></div>
+                            <span class="truncate">${item.leader}</span>
+                        </div>
+                        ${displayMemo}
+                    </div>`;
+                });
+                html += `</div></div>`;
+            });
+            container.innerHTML = html;
+        } catch (e) {
+            console.error(e);
+            container.innerHTML = `<div class="text-red-500 p-4">Error Rendering Board: ${e.message}</div>`;
+        }
+    }
+
+    let pendingKanbanUpdate = null; 
+
+    function drag(ev, key, wo, tsel, currentStatus) {
+        ev.dataTransfer.setData("key", key);
+        ev.dataTransfer.setData("wo", wo);
+        ev.dataTransfer.setData("tsel", tsel);
+        ev.dataTransfer.setData("currentStatus", currentStatus);
+        ev.dataTransfer.effectAllowed = "move";
+    }
+    
+    function allowDrop(ev, colKey) {
+        const role = (localStorage.getItem("sym_pro_role") || "").toLowerCase();
+        const permissions = {
+            'superadmin': ['OPEN', 'PROGRESS', 'FINISH_INSTALL', 'VALID_4', 'COMPLETED', 'DROP'],
+            'admin': ['VALID_4', 'COMPLETED'],
+            'korlap': ['PROGRESS', 'FINISH_INSTALL', 'COMPLETED']
+        };
+        const allowedLanes = permissions[role] || [];
+        
+        if (role === 'superadmin' || allowedLanes.includes(colKey)) {
+            ev.preventDefault(); 
+            ev.dataTransfer.dropEffect = "move";
+        }
+    }
+    
+    function drop(ev, colKey, title) {
+        ev.preventDefault();
+        const key = ev.dataTransfer.getData("key");
+        const wo = ev.dataTransfer.getData("wo");
+        const tsel = ev.dataTransfer.getData("tsel");
+        const currentStatus = ev.dataTransfer.getData("currentStatus");
+        
+        pendingKanbanUpdate = { key, wo, tsel, newStatus: colKey, currentStatus, title };
+        
+        const titleEl = document.getElementById('kanban-update-title');
+        const modalEl = document.getElementById('kanban-update-modal');
+        const noteEl = document.getElementById('kanban-update-note');
+
+        if(titleEl && modalEl && noteEl) {
+            titleEl.innerHTML = `<i class="fa-solid fa-truck-fast text-blue-500"></i> Pindah ke: ${title}`;
+            noteEl.value = "";
+            modalEl.classList.remove('hidden');
+        }
+    }
+
+    function openKanbanUpdateOnly(key, wo, tsel, currentStatus) {
+        pendingKanbanUpdate = { key, wo, tsel, newStatus: currentStatus, currentStatus, title: currentStatus };
+        
+        const titleEl = document.getElementById('kanban-update-title');
+        const modalEl = document.getElementById('kanban-update-modal');
+        const noteEl = document.getElementById('kanban-update-note');
+
+        if(titleEl && modalEl && noteEl) {
+            titleEl.innerHTML = `<i class="fa-solid fa-pen-to-square text-amber-500"></i> Update Pekerjaan`;
+            noteEl.value = "";
+            modalEl.classList.remove('hidden');
+        }
+    }
+
+    function confirmKanbanUpdate() {
+        const noteEl = document.getElementById('kanban-update-note');
+        const note = noteEl ? noteEl.value : "";
+        
+        if (!note.trim()) {
+            showMessage("Silakan isi update progres pekerjaan terlebih dahulu!", "error");
+            return;
+        }
+
+        const modalEl = document.getElementById('kanban-update-modal');
+        if (modalEl) modalEl.classList.add('hidden');
+        
+        updateKanbanBackend(
+            pendingKanbanUpdate.key, 
+            pendingKanbanUpdate.wo, 
+            pendingKanbanUpdate.tsel, 
+            pendingKanbanUpdate.newStatus, 
+            note
+        );
+    }
+
+    function updateKanbanBackend(key, wo, tsel, newStatus, note) {
+        const user = localStorage.getItem("sym_pro_user") || "Unknown User";
+        const now = new Date();
+        const timestamp = now.toLocaleDateString('id-ID', {day: '2-digit', month: '2-digit', year: 'numeric'}) + ' ' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+
+        const loading = document.getElementById('board-loading');
+        const container = document.getElementById('kanban-container');
+
+        if (loading) loading.classList.remove('hidden');
+        if (container) container.innerHTML = '';
+
+        if (typeof google === 'undefined') return;
+
+        google.script.run.withSuccessHandler(function(res) {
+            if(res.success) { showMessage(res.message, "success"); } 
+            else { showMessage(res.message, "error"); }
+            loadBoardKendalaData(); 
+        }).updateKanbanBoard({
+            trackId: tsel, workorder: wo, newStatus: newStatus, user: user, timestamp: timestamp, note: note
+        });
+    }
+
+    function viewKanbanHistory(key) {
+        let cleanKey = String(key).trim();
+        let history = window.kanbanHistories[cleanKey] || "";
+        let content = document.getElementById('kanban-history-content');
+        const modal = document.getElementById('kanban-history-modal');
+        
+        if (!content || !modal) return;
+
+        if(!history || history === "undefined") {
+            content.innerHTML = `<div class="text-center py-8 text-gray-400 font-medium italic">Belum ada history update.</div>`;
+        } else {
+            let logs = history.split(/\n\s*\n/); 
+            let html = `<div class="space-y-4">`;
+            
+            logs.forEach(log => {
+                let lines = log.split("\n");
+                let headerLine = lines[0];
+                let noteLine = lines.length > 1 ? lines.slice(1).join("<br>") : "";
+
+                let match = headerLine.match(/\[(.*?)\] (.*)/);
+                if(match) {
+                    let noteHtml = noteLine ? `<div class="mt-2 pt-2 border-t border-gray-100 text-slate-600 italic bg-amber-50/50 p-2 rounded-lg text-[10px]">${noteLine.replace('📝 Update: ', '')}</div>` : "";
+                    html += `
+                    <div class="flex items-start gap-3">
+                        <div class="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center shrink-0 border border-blue-200 shadow-sm mt-0.5"><i class="fa-solid fa-clock-rotate-left text-[10px]"></i></div>
+                        <div class="bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm flex-1">
+                            <div class="font-black text-slate-800 text-[10px] border-b border-gray-100 pb-1 mb-1">${match[1]}</div>
+                            <div class="text-slate-700 font-bold text-[11px] leading-snug">${match[2]}</div>
+                            ${noteHtml}
+                        </div>
+                    </div>`;
+                }
+            });
+            html += `</div>`;
+            content.innerHTML = html;
+        }
+        modal.classList.remove('hidden');
+    }
+
+    function openDetailModalByWo(wo) {
+        const idx = globalDailyRows.findIndex(r => String(r[globalDailyHeaders.findIndex(h => String(h).toLowerCase().includes('workorder'))]).trim() === wo);
+        if (idx !== -1) {
+            openDetailModal(idx);
+        } else {
+            showMessage("Data detail tidak ditemukan.", "error");
+        }
+    }
+
+    function loadAccessControlData() {
+        google.script.run.withSuccessHandler(function(data) {
+            const container = document.getElementById('config-form');
+            let html = '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+            data.forEach((row, i) => {
+                html += `<div>
+                    <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">${row[0]}</label>
+                    <input type="text" class="config-input w-full border border-gray-200 rounded-lg px-3 py-2 text-xs" data-key="${row[0]}" value="${row[1]}">
+                </div>`;
+            });
+            html += `</div><button onclick="saveConfigs()" class="mt-6 px-6 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700">Simpan Perubahan</button>`;
+            container.innerHTML = html;
+        }).getAllConfigs();
+    }
+
+    function saveConfigs() {
+        let inputs = document.querySelectorAll('.config-input');
+        let newConfigs = [];
+        inputs.forEach(input => {
+            newConfigs.push([input.dataset.key, input.value]);
+        });
+        
+        google.script.run.withSuccessHandler(function(res) {
+            showMessage(res.message, res.success ? "success" : "error");
+        }).saveAllConfigs(newConfigs);
+    }
+
+    function closeAllDropdowns() {
+        const dropdowns = document.querySelectorAll('.dropdown-menu');
+        dropdowns.forEach(d => d.classList.add('hidden'));
+    }
 </script>
