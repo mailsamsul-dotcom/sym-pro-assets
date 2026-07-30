@@ -1,0 +1,71 @@
+// User.gs
+function registerUser(data) {
+  try {
+    // Menggunakan getConfig untuk mengambil ID Spreadsheet secara dinamis
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID')).getSheetByName("Users");
+    const dataRange = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < dataRange.length; i++) {
+      if (dataRange[i][2] === data.email || dataRange[i][3] === data.username) {
+        return { success: false, message: "Email atau Username sudah terdaftar!" };
+      }
+    }
+    
+    sheet.appendRow([
+      new Date(), 
+      data.namaLengkap, 
+      data.email, 
+      data.username, 
+      data.password, 
+      data.chatId,
+      'user',
+      'pending'
+    ]);
+    
+    return { success: true, message: "Registrasi berhasil! Mohon tunggu approval dari Superadmin." };
+  } catch(e) {
+    return { success: false, message: "Error: " + e.message };
+  }
+}
+
+function getAllUsers() {
+  try {
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID')).getSheetByName("Users");
+    if (!sheet) return { success: false, users: [], message: "Sheet Users tidak ditemukan." };
+    
+    const data = sheet.getDataRange().getValues();
+    let users = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      if(data[i][3]) { 
+        users.push({
+          nama: data[i][1],
+          email: data[i][2],
+          username: data[i][3],
+          role: data[i][6] || 'user',
+          status: data[i][7] || 'pending'
+        });
+      }
+    }
+    return { success: true, users: users };
+  } catch(e) {
+    return { success: false, users: [], message: e.message };
+  }
+}
+
+function approveUserByAdmin(username) {
+  try {
+    const sheet = SpreadsheetApp.openById(getConfig('SHEET_ID')).getSheetByName("Users");
+    const data = sheet.getDataRange().getValues();
+    
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][3]).trim() === String(username).trim()) {
+        sheet.getRange(i + 1, 8).setValue('active'); 
+        return { success: true, message: `User ${username} berhasil di-approve!` };
+      }
+    }
+    return { success: false, message: "User tidak ditemukan." };
+  } catch(e) {
+    return { success: false, message: e.message };
+  }
+}
