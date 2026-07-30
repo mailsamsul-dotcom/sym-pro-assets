@@ -1,0 +1,116 @@
+function sendTelegramOTP(chatId, otp) {
+  try {
+    if (!chatId || chatId === "" || chatId === "undefined") {
+      return { status: false, errorDetail: "Chat ID kosong." };
+    }
+    
+    // Ambil BOT_TOKEN secara dinamis
+    const BOT_TOKEN = getConfig("BOT_TOKEN");
+    
+    let message = `🔑 *Kode OTP Login Sym_Pro*\n\nKode verifikasi Anda adalah: *${otp}*\nBerlaku selama 5 menit. Jangan berikan kode ini kepada siapa pun.`;
+    let url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    
+    let payload = {
+      method: 'post',
+      contentType: 'application/json',
+      payload: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'Markdown'
+      }),
+      muteHttpExceptions: true
+    };
+    
+    let response = UrlFetchApp.fetch(url, payload);
+    let result = JSON.parse(response.getContentText());
+    
+    if (result.ok) {
+      return { status: true };
+    } else {
+      return { status: false, errorDetail: result.description || "Gagal dari Telegram API" };
+    }
+  } catch (e) {
+    return { status: false, errorDetail: e.message };
+  }
+}
+
+function sendTelegramNotification(orderData, timName) {
+  try {
+    const BOT_TOKEN = getConfig("BOT_TOKEN");
+    const GROUP_ID  = getConfig("GROUP_ID");
+
+    if (!BOT_TOKEN || !GROUP_ID) {
+      console.log("Telegram Error: BOT_TOKEN atau GROUP_ID kosong di Config");
+      return;
+    }
+
+    // Menggunakan getConfig untuk mendapatkan ID Spreadsheet
+    const ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    const techSheet = ss.getSheetByName("Master Teknisi");
+    
+    let techData = [];
+    if (techSheet) {
+        techData = techSheet.getDataRange().getValues();
+    }
+    
+    // Logika pencarian: Nama (Kolom A / Index 0), Username (Kolom C / Index 2)
+    const getTeleUser = (nama) => {
+      if (techData.length === 0) return nama;
+      let found = techData.find(row => String(row[0]).trim().toUpperCase() === String(nama).trim().toUpperCase());
+      if (found && found[2]) {
+        let cleanUsername = String(found[2]).replace(/@/g, '').trim();
+        return `@${cleanUsername}`;
+      }
+      return nama;
+    };
+
+    let userL = getTeleUser(orderData.leader);
+    let userM = getTeleUser(orderData.member);
+
+    // Fungsi pembersih agar HTML Telegram tidak crash jika ada simbol <, >, atau &
+    const clean = (str) => {
+        return String(str || "-").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    };
+
+    // MENGGUNAKAN HTML AGAR LEBIH AMAN DARI ERROR FORMATTING
+    let text = `🚀 <b>[ORDER ASSIGNED]</b>\n\n` +
+               `<b>1. Informasi Pelanggan</b>\n` +
+               `Nama : ${clean(orderData.custName)}\n` +
+               `Alamat : ${clean(orderData.address)}\n` +
+               `Telp : ${clean(orderData.contact)}\n\n` +
+               `<b>2. Detail Order</b>\n` +
+               `Type : ${clean(orderData.type)}\n` +
+               `Workorder : ${clean(orderData.wo)}\n` +
+               `Order ID TSEL : ${clean(orderData.trackId)}\n` +
+               `Service No. : ${clean(orderData.serviceNo)}\n` +
+               `Package Info : ${clean(orderData.pkgInfo)}\n` +
+               `Date Created : ${clean(orderData.created)}\n` +
+               `Booking Date : ${clean(orderData.booking)}\n\n` +
+               `<b>3. Assigned & Update</b>\n` +
+               `Tim : ${clean(timName)}\n` +
+               `Petugas : ${userL} / ${userM}\n` +
+               `<i>Segera lakukan instalasi/perbaikan.</i>`;
+
+    let url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
+    
+    let options = {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true, // WAJIB ada agar kita tau error spesifiknya
+      payload: JSON.stringify({ 
+        chat_id: GROUP_ID, 
+        text: text, 
+        parse_mode: 'HTML' // Menggunakan HTML untuk menghindari crash karakter khusus
+      })
+    };
+    
+    let response = UrlFetchApp.fetch(url, options);
+    let result = JSON.parse(response.getContentText());
+    
+    if (!result.ok) {
+        console.log("Telegram API Error: " + result.description);
+    }
+  } catch(e) {
+    console.log("Error Exec Telegram: " + e.message);
+  }
+}
