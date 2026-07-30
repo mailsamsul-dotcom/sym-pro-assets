@@ -18,8 +18,8 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
-    <!-- PANGGIL FILE STYLESHEET.HTML -->
-    <?!= HtmlService.createHtmlOutputFromFile('Stylesheet').getContent(); ?>
+    <!-- PANGGIL FILE CSS.HTML -->
+    <?!= HtmlService.createHtmlOutputFromFile('Css').getContent(); ?>
 </head>
 
 <body class="min-h-screen flex items-center justify-center p-4 relative" onclick="closeAllDropdowns(event)">
@@ -203,21 +203,31 @@
                         </div>
                     </div>
 
-                    <!-- 2. ALL WORK ORDER -->
+                    <!-- 2. ORDER PROVISIONING -->
                     <div>
-                        <div onclick="toggleSubMenu('submenu-workorder')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
-                            <span class="flex items-center gap-3"><i class="fa-solid fa-list-check text-blue-600"></i> All Work Order</span>
-                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-workorder"></i>
+                        <div onclick="toggleSubMenu('submenu-order-prov')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            <span class="flex items-center gap-3"><i class="fa-solid fa-network-wired text-blue-600"></i> Order Provisioning</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-order-prov"></i>
                         </div>
-                        <div id="submenu-workorder" class="hidden pl-6 space-y-1 mt-1">
+                        <div id="submenu-order-prov" class="hidden pl-6 space-y-1 mt-1">
                             <a href="#" onclick="switchMenu('daily-report')" id="menu-daily-report" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Daily Report</a>
+                            <a href="#" onclick="switchMenu('order-hi')" id="menu-order-hi" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Order Hi</a>
                             <a href="#" onclick="switchMenu('daily-order')" id="menu-daily-order" class="flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">
                                 <span>Inbox Assign</span>
                                 <span id="unassigned-badge" class="hidden bg-red-500 text-white font-bold text-[10px] px-2 py-0.5 rounded-full">0</span>
                             </a>
-                            <a href="#" onclick="switchMenu('order-hi')" id="menu-order-hi" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Order Hi</a>
-                            <a href="#" onclick="switchMenu('order-kendala')" id="menu-order-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Inbox Kendala</a>
-                            <a href="#" onclick="switchMenu('order-completed')" id="menu-order-completed" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Order Completed</a>
+                            <a href="#" onclick="switchMenu('order-completed')" id="menu-order-completed" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Data Completed (PS)</a>
+                        </div>
+                    </div>
+
+                    <!-- 3. ISSUED TRACKING -->
+                    <div>
+                        <div onclick="toggleSubMenu('submenu-issued-track')" class="flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50 cursor-pointer">
+                            <span class="flex items-center gap-3"><i class="fa-solid fa-triangle-exclamation text-rose-600"></i> Issued tracking</span>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 transition-transform duration-200" id="arrow-issued-track"></i>
+                        </div>
+                        <div id="submenu-issued-track" class="hidden pl-6 space-y-1 mt-1">
+                            <a href="#" onclick="switchMenu('order-kendala')" id="menu-order-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Kendala Pelanggan</a>
                             <a href="#" onclick="switchMenu('data-kendala')" id="menu-data-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">List Kendala Teknik</a>
                             <a href="#" onclick="switchMenu('board-kendala')" id="menu-board-kendala" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Board Kendala Teknik</a>
                         </div>
@@ -249,6 +259,9 @@
                             <a href="#" onclick="switchMenu('manage-user')" id="menu-manage-user" class="hidden px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Management User</a>
                             <!-- SUB-MENU BARU: DATA NAKER -->
                             <a href="#" onclick="switchMenu('data-naker')" id="menu-data-naker" class="block px-3 py-2 rounded-lg text-xs font-medium text-gray-500 hover:bg-blue-50 hover:text-[#0d55d4] transition">Data Naker</a>
+                            <a href="#" onclick="switchMenu('access-control')" id="menu-access-control" class="hidden flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium text-gray-600 hover:bg-gray-50">
+                                <i class="fa-solid fa-lock"></i> Access Control
+                            </a>
                         </div>
                     </div>
 
@@ -270,14 +283,11 @@
             <main class="flex-1 overflow-y-auto custom-scrollbar bg-white flex flex-col relative">
                 
                 <!-- VIEW WRAPPER: DASHBOARD KPI -->
-                <!-- VIEW WRAPPER: DASHBOARD KPI ASS B2C -->
-                <div id="view-wrapper-dashboard" class="hidden w-full h-full p-4 lg:p-8 bg-[#f8fafc] text-gray-800 overflow-y-auto custom-scrollbar">
+                <div id="view-wrapper-dashboard" class="hidden w-full h-full p-4 lg:p-8 bg-[#f8fafc] text-slate-800 overflow-y-auto custom-scrollbar">
                     
-                    <div id="dashboard-ass-b2c-content" class="max-w-[1350px] mx-auto space-y-6">
-                        
-                        <!-- SECTION 1: TOP ROW (4 KARTU: RESUME, SA, AG, IMBAL JASA) -->
+                    <!-- 1. KONTEN DASHBOARD KPI ASS B2C -->
+                    <div id="dashboard-ass-b2c-content" class="hidden max-w-[1350px] mx-auto space-y-6">
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 items-stretch">
-                            
                             <!-- KARTU 1: RESUME KPI B2C -->
                             <div class="lg:col-span-4 b2c-card-ref p-4 justify-between">
                                 <div class="b2c-card-title-ref">RESUME KPI B2C</div>
@@ -386,15 +396,13 @@
                                     <i class="fa-solid fa-arrow-right"></i>
                                 </button>
                             </div>
-                            
                         </div>
 
-                        <!-- SECTION 2: TTR COMPLIANCE (5 KARTU SEJAJAR) -->
+                        <!-- SECTION 2: TTR COMPLIANCE -->
                         <div class="b2c-card-ref p-5">
                             <div class="b2c-card-title-ref !mb-4">TTR COMPLIANCE</div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                                
                                 <!-- CARD 1: 3Jam MANJA -->
                                 <div class="ttr-card-ref">
                                     <div class="ttr-header-ref">3Jam_MANJA <i class="fa-regular fa-calendar text-orange-500 ml-1"></i></div>
@@ -549,17 +557,156 @@
                                         </div>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
 
+                    <!-- 2. KONTEN DASHBOARD KPI PROV B2C -->
+                    <div id="dashboard-prov-b2c-content" class="hidden max-w-[1350px] mx-auto space-y-6">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-4">
+                            <div>
+                                <h1 class="text-lg font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                                    <i class="fa-solid fa-chart-line text-blue-600"></i> Dashboard KPI Prov B2C
+                                </h1>
+                                <p class="text-xs text-slate-500 font-medium mt-0.5">
+                                    Monitoring performa provisioning NewSales KPRO secara real-time.
+                                </p>
+                            </div>
+                            <button onclick="loadKpiDashboard('dashboard-prov-b2c')" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-2">
+                                <i class="fa-solid fa-rotate-right"></i>
+                                <span>Refresh Data</span>
+                            </button>
+                        </div>
+
+                        <!-- 4 CARD UTAMA: SINGLE METRICS -->
+                        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <!-- CARD 1: TRANSAKSI MTD -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-blue-300 transition-all">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Transaksi MTD</span>
+                                    <div class="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center text-sm shadow-xs">
+                                        <i class="fa-solid fa-file-invoice"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-3xl font-black text-slate-900 tracking-tight" id="prov-transaksi-mtd">0</div>
+                                    <div class="text-[11px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
+                                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                        <span>Total Order Masuk Bulan Ini</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CARD 2: ORDER PI -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-amber-300 transition-all">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Order PI</span>
+                                    <div class="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-sm shadow-xs">
+                                        <i class="fa-solid fa-clock-rotate-left"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-3xl font-black text-slate-900 tracking-tight" id="prov-order-pi">0</div>
+                                    <div class="text-[11px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
+                                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                                        <span>Dalam Proses Instalasi</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CARD 3: SUDAH IKR -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-indigo-300 transition-all">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Sudah IKR</span>
+                                    <div class="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-sm shadow-xs">
+                                        <i class="fa-solid fa-network-wired"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-3xl font-black text-slate-900 tracking-tight" id="prov-sudah-ikr">0</div>
+                                    <div class="text-[11px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
+                                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+                                        <span>Instalasi Kabel Ready</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CARD 4: JUMLAH PS MTD -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between hover:border-emerald-300 transition-all">
+                                <div class="flex items-center justify-between mb-4">
+                                    <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Jumlah PS MTD</span>
+                                    <div class="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-sm shadow-xs">
+                                        <i class="fa-solid fa-circle-check"></i>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="text-3xl font-black text-emerald-600 tracking-tight" id="prov-jumlah-ps-mtd">0</div>
+                                    <div class="text-[11px] font-semibold text-slate-400 mt-1 flex items-center gap-1">
+                                        <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                        <span>Sukses Pasang Baru Bulan Ini</span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
+                        <!-- 2 CARD SPLIT: KENDALA & CANCELED -->
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <!-- CARD 5: KENDALA -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                                <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center text-xs font-bold">
+                                            <i class="fa-solid fa-triangle-exclamation"></i>
+                                        </div>
+                                        <span class="text-xs font-black text-slate-800 uppercase tracking-wider">KENDALA</span>
+                                    </div>
+                                    <span class="text-[10px] font-bold text-rose-600 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-100">
+                                        Teknis & Pelanggan
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 text-center divide-x divide-slate-100 py-2">
+                                    <div>
+                                        <div class="text-[11px] font-extrabold text-slate-400 uppercase mb-1">MTD (Month to Date)</div>
+                                        <div class="text-3xl font-black text-rose-600" id="prov-kendala-mtd">0</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-[11px] font-extrabold text-slate-400 uppercase mb-1">YTD (Year to Date)</div>
+                                        <div class="text-3xl font-black text-slate-800" id="prov-kendala-ytd">0</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CARD 6: CANCELED -->
+                            <div class="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+                                <div class="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+                                    <div class="flex items-center gap-2.5">
+                                        <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center text-xs font-bold">
+                                            <i class="fa-solid fa-ban"></i>
+                                        </div>
+                                        <span class="text-xs font-black text-slate-800 uppercase tracking-wider">CANCELED</span>
+                                    </div>
+                                    <span class="text-[10px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full border border-slate-200">
+                                        Batal / Cabut Order
+                                    </span>
+                                </div>
+                                <div class="grid grid-cols-2 gap-4 text-center divide-x divide-slate-100 py-2">
+                                    <div>
+                                        <div class="text-[11px] font-extrabold text-slate-400 uppercase mb-1">MTD (Month to Date)</div>
+                                        <div class="text-3xl font-black text-slate-700" id="prov-canceled-mtd">0</div>
+                                    </div>
+                                    <div>
+                                        <div class="text-[11px] font-extrabold text-slate-400 uppercase mb-1">YTD (Year to Date)</div>
+                                        <div class="text-3xl font-black text-slate-900" id="prov-canceled-ytd">0</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <!-- VIEW WRAPPER: TO DO LIST (NOTION STYLE) -->
+                <!-- VIEW WRAPPER: TO DO LIST -->
                 <div id="view-wrapper-todo-list" class="hidden w-full h-full pt-6 px-4 md:px-8 overflow-y-auto bg-white">
                     <div class="w-full pb-20">
-                        <!-- Header Notion Style -->
                         <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shrink-0 pb-6">
                             <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-3 tracking-tight">
                                 <i class="fa-regular fa-square-check text-gray-300"></i> My Tasks Hub
@@ -570,7 +717,6 @@
                             </div>
                         </div>
 
-                        <!-- Progress Bar Keseluruhan -->
                         <div class="flex items-center gap-4 mb-8 text-xs text-gray-500 font-medium">
                             <span id="todo-progress-text">0% completed</span>
                             <div class="flex-1 bg-gray-100 h-1.5 rounded-full overflow-hidden">
@@ -578,7 +724,6 @@
                             </div>
                         </div>
 
-                        <!-- Headers Column -->
                         <div class="flex items-center px-4 pb-2 border-b border-gray-200 text-xs text-gray-400 font-medium select-none">
                             <div class="w-8"></div>
                             <div class="flex-1 min-w-[200px]">Task name</div>
@@ -588,19 +733,16 @@
                             <div class="w-32 text-right">Time / Date</div>
                         </div>
 
-                        <!-- Indikator Loading -->
                         <div id="todo-loading" class="text-center py-10">
                             <i class="fa-solid fa-spinner fa-spin text-xl text-blue-500 mb-2"></i>
                             <p class="text-[11px] text-gray-500">Memuat tasks dari database...</p>
                         </div>
 
-                        <!-- Container Daily Task -->
                         <div class="mt-6 mb-2 flex items-center gap-2 px-2 text-sm font-bold text-blue-800">
                             <i class="fa-solid fa-sun text-orange-400"></i> Daily Tasks
                         </div>
                         <div id="notion-daily-container" class="space-y-1 mb-8 border border-gray-100 rounded-xl overflow-hidden p-1 shadow-sm bg-white"></div>
 
-                        <!-- Weekly Goal Tracker -->
                         <div class="bg-indigo-50 border border-indigo-100 rounded-xl p-4 mb-4 flex items-center justify-between">
                             <div class="flex items-center gap-3">
                                 <div class="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-500 text-lg"><i class="fa-solid fa-bullseye"></i></div>
@@ -614,7 +756,6 @@
                             </div>
                         </div>
 
-                        <!-- Container Weekly Task -->
                         <div class="mt-6 mb-2 flex items-center gap-2 px-2 text-sm font-bold text-purple-800">
                             <i class="fa-solid fa-calendar-week text-purple-400"></i> Weekly Tasks
                         </div>
@@ -745,7 +886,6 @@
                         <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-1 flex flex-col h-[350px] relative">
                             <h3 class="absolute top-4 left-5 z-[500] text-[13px] font-bold text-gray-800 tracking-wide uppercase bg-white/80 backdrop-blur px-3 py-1.5 rounded-lg shadow-sm">8. PETA SEBARAN ORDER</h3>
                             
-                            <!-- GEOCODING INDICATOR -->
                             <div id="map-geo-indicator" class="hidden absolute top-4 right-5 z-[500] text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-lg shadow-sm flex items-center gap-2">
                                 <i class="fa-solid fa-spinner fa-spin"></i> Memuat akurasi lokasi Google Maps / OSM...
                             </div>
@@ -843,15 +983,69 @@
                 </div>
 
                 <!-- VIEW: BOARD KENDALA TEKNIK -->
-                <div id="view-wrapper-board-kendala" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
-                    <div class="w-full h-full flex flex-col items-center justify-center bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center">
-                        <div class="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-500 text-3xl mb-4 shadow-sm">
-                            <i class="fa-solid fa-clipboard-list"></i>
+                <div id="view-wrapper-board-kendala" class="hidden w-full h-full p-4 md:p-6 bg-[#f8fafc] text-gray-800 flex flex-col overflow-hidden">
+                    
+                    <!-- Header & Filter Section -->
+                    <div class="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4 mb-4 shrink-0 bg-white p-4 rounded-2xl border border-gray-100 shadow-sm">
+                        <h1 class="text-lg font-bold text-gray-900 flex items-center shrink-0">
+                            <i class="fa-solid fa-kanban text-[#0d55d4] mr-2"></i> Board Kendala Teknik
+                        </h1>
+                        
+                        <div class="flex flex-wrap items-center gap-2.5 w-full xl:w-auto">
+                            <!-- Filter Search Input (WO / TSEL ID) -->
+                            <div class="bg-gray-50 border border-gray-200 rounded-xl px-3 flex items-center shadow-xs w-full sm:w-auto min-w-[200px]">
+                                <i class="fa-solid fa-magnifying-glass text-gray-400 text-[11px] mr-2"></i>
+                                <input type="text" id="board-search" placeholder="Cari WO / Track ID..." class="border-none bg-transparent py-2 text-[11px] font-semibold text-gray-700 outline-none w-full">
+                            </div>
+
+                            <!-- Filter Date Range -->
+                            <div class="bg-gray-50 border border-gray-200 rounded-xl px-3 flex items-center shadow-xs">
+                                <i class="fa-regular fa-calendar-days text-gray-400 text-[11px] mr-2"></i>
+                                <input type="date" id="board-start-date" class="border-none bg-transparent py-2 text-[11px] font-semibold text-gray-700 outline-none cursor-pointer">
+                                <span class="text-[10px] text-gray-400 font-bold mx-1">-</span>
+                                <input type="date" id="board-end-date" class="border-none bg-transparent py-2 text-[11px] font-semibold text-gray-700 outline-none cursor-pointer">
+                            </div>
+                            
+                            <!-- Filter Sub Error Code -->
+                            <select id="board-filter-suberr" class="border border-gray-200 rounded-xl px-3 py-2 text-[11px] font-semibold text-gray-700 outline-none shadow-xs bg-white w-full sm:w-auto min-w-[160px]">
+                                <option value="">Semua Sub Error Code</option>
+                            </select>
+                            
+                            <!-- Buttons -->
+                            <button onclick="applyBoardFilters()" class="px-4 py-2 bg-[#0d55d4] text-white rounded-xl text-xs font-semibold hover:bg-[#0b47b5] transition shadow-xs flex items-center gap-1.5 flex-1 sm:flex-none justify-center"><i class="fa-solid fa-filter"></i> Cari & Filter</button>
+                            <button onclick="loadBoardKendalaData(true)" class="px-3 py-2 bg-blue-50 text-[#0d55d4] rounded-xl text-xs font-semibold hover:bg-blue-100 transition shadow-xs flex items-center justify-center shrink-0"><i class="fa-solid fa-rotate-right"></i></button>
                         </div>
-                        <h2 class="text-xl font-bold text-gray-800 mb-2">Board Kendala Teknik</h2>
-                        <p class="text-xs text-gray-500 max-w-md mx-auto leading-relaxed">
-                            Coming Soon...
-                        </p>
+                    </div>
+                    
+                    <!-- Loading Indicator -->
+                    <div id="board-loading" class="hidden text-center py-10 w-full flex-col items-center justify-center">
+                        <i class="fa-solid fa-spinner fa-spin text-blue-600 text-2xl mb-2"></i>
+                        <p class="text-xs text-gray-500 font-medium mt-2">Memuat & Menyinkronkan Kanban Board...</p>
+                    </div>
+
+                    <!-- Kanban Container -->
+                    <div class="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar flex gap-5 pb-4" id="kanban-container">
+                        <!-- Kanban Columns dipasang via JS -->
+                    </div>
+                </div>
+
+                <!-- MODAL KANBAN INPUT PROGRESS -->
+                <div id="kanban-update-modal" class="hidden fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div class="bg-white rounded-2xl max-w-md w-full shadow-2xl overflow-hidden animate-fadeIn border-4 border-amber-500/20">
+                        <div class="bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+                            <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2" id="kanban-update-title">
+                                Update Progress Pekerjaan
+                            </h3>
+                            <button onclick="document.getElementById('kanban-update-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-700"><i class="fa-solid fa-xmark"></i></button>
+                        </div>
+                        <div class="p-5 bg-gray-50/50">
+                            <label class="block text-[11px] font-bold text-gray-600 mb-2 uppercase tracking-wide">Hasil / Update Pekerjaan</label>
+                            <textarea id="kanban-update-note" rows="4" class="w-full border border-gray-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20 transition-all bg-white" placeholder="Ketikkan update pekerjaan yang sudah dilakukan... (Wajib diisi)"></textarea>
+                            <div class="mt-4 flex gap-2 justify-end">
+                                <button onclick="document.getElementById('kanban-update-modal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded-xl text-xs font-bold transition">Batal</button>
+                                <button onclick="confirmKanbanUpdate()" class="px-4 py-2 bg-amber-500 text-white hover:bg-amber-600 rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2"><i class="fa-solid fa-check"></i> Simpan Update</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -938,11 +1132,22 @@
                     </div>
                 </div>
 
+                <!-- VIEW: ACCESS CONTROL -->
+                <div id="view-wrapper-access-control" class="hidden w-full h-full p-6 md:p-8 bg-[#f8fafc] text-gray-800">
+                    <h1 class="text-lg font-bold mb-4">Access Control & Config</h1>
+                    <div class="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                        <p class="text-xs text-gray-500 mb-4">Ubah nilai di bawah untuk konfigurasi sistem tanpa menyentuh kode.</p>
+                        <div id="config-form" class="space-y-4">
+                            <!-- Kita bisa buatkan form yang membaca sheet 'Config' di sini -->
+                        </div>
+                    </div>
+                </div>
+
             </main>
         </div>
     </div>
 
-    <!-- PANGGIL FILE JAVASCRIPT.HTML -->
-    <?!= HtmlService.createHtmlOutputFromFile('JavaScript').getContent(); ?>
+    <!-- PANGGIL FILE JS.HTML -->
+    <?!= HtmlService.createHtmlOutputFromFile('JS').getContent(); ?>
 </body>
 </html>
