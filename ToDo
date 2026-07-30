@@ -1,0 +1,84 @@
+// Todo.gs
+function getToDoList() {
+  try {
+    // Menggunakan getConfig untuk ID Spreadsheet
+    var ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    var sheet = ss.getSheetByName("To Do List");
+    
+    if (!sheet) {
+      sheet = ss.insertSheet("To Do List");
+      sheet.appendRow(["Task ID", "Type", "Title", "Assignee", "Status", "Priority", "Time", "Created By", "Timestamp"]);
+      return { success: true, data: [] };
+    }
+    
+    var data = sheet.getDataRange().getValues();
+    var tasks = [];
+    
+    for (var i = 1; i < data.length; i++) {
+      if (data[i][0]) {
+        var rawTime = data[i][6];
+        var timeStr = "";
+        if (rawTime instanceof Date) {
+            var h = String(rawTime.getHours()).padStart(2, '0');
+            var m = String(rawTime.getMinutes()).padStart(2, '0');
+            timeStr = h + ":" + m;
+        } else {
+            timeStr = String(rawTime || "");
+        }
+
+        tasks.push({
+          id: String(data[i][0] || ""),
+          type: String(data[i][1] || ""),
+          title: String(data[i][2] || ""),
+          assignee: String(data[i][3] || ""),
+          status: String(data[i][4] || ""),
+          priority: String(data[i][5] || ""),
+          time: timeStr,
+          originalIndex: i + 1
+        });
+      }
+    }
+    return { success: true, data: tasks };
+  } catch(e) {
+    return { success: false, message: e.message, data: [] };
+  }
+}
+
+function saveOrUpdateToDo(payload) {
+  try {
+    // Menggunakan getConfig untuk ID Spreadsheet
+    var ss = SpreadsheetApp.openById(getConfig('SHEET_ID'));
+    var sheet = ss.getSheetByName("To Do List");
+    if (!sheet) sheet = ss.insertSheet("To Do List");
+    
+    var now = new Date().toLocaleString('id-ID');
+    
+    if (payload.action === 'new') {
+      var newId = "TSK-" + new Date().getTime();
+      sheet.appendRow([
+        newId, payload.type, payload.title, payload.assignee, 
+        payload.status, payload.priority, payload.time, payload.user, now
+      ]);
+      SpreadsheetApp.flush();
+      return { success: true, message: "Task baru berhasil ditambahkan!", newId: newId };
+    } 
+    else if (payload.action === 'edit' || payload.action === 'toggle') {
+      var row = payload.originalIndex;
+      if (payload.action === 'toggle') {
+        sheet.getRange(row, 5).setValue(payload.status);
+        SpreadsheetApp.flush();
+        return { success: true, message: "Status task diperbarui." };
+      }
+      sheet.getRange(row, 2).setValue(payload.type);
+      sheet.getRange(row, 3).setValue(payload.title);
+      sheet.getRange(row, 4).setValue(payload.assignee);
+      sheet.getRange(row, 5).setValue(payload.status);
+      sheet.getRange(row, 6).setValue(payload.priority);
+      sheet.getRange(row, 7).setValue(payload.time);
+      SpreadsheetApp.flush();
+      return { success: true, message: "Task berhasil di-update!" };
+    }
+  } catch(e) {
+    return { success: false, message: "Gagal menyimpan task: " + e.message };
+  }
+}
